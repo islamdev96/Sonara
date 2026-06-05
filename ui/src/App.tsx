@@ -1,25 +1,114 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 function App() {
   const [isOn, setIsOn] = useState(true);
   const [masterBoost, setMasterBoost] = useState(150);
   
-  // Fake state for visual EQ curve matching FxSound
+  const defaultEq = [50, 50, 50, 50, 50, 50, 50, 50, 50];
   const [eqValues, setEqValues] = useState([50, 45, 60, 75, 65, 55, 45, 50, 55]);
   
+  const [clarity, setClarity] = useState(50);
+  const [ambience, setAmbience] = useState(30);
+  const [dynamicBoost, setDynamicBoost] = useState(70);
+  const [bassBoost, setBassBoost] = useState(40);
+
+  const [customPresets, setCustomPresets] = useState<any>({});
+  const [presetName, setPresetName] = useState('');
+  const [audioLevel, setAudioLevel] = useState(0);
+
   const bands = ["115 Hz", "250 Hz", "450 Hz", "630 Hz", "1.25 kHz", "2.70 kHz", "5.30 kHz", "7.50 kHz", "13.00 kHz"];
 
-  // Calculate dynamic SVG path based on EQ values
-  // EQ box is 220px high, 150px slider length
+  const defaultPresets = {
+    'Default': { eq: defaultEq, boost: 100, clarity: 0, ambience: 0, bass: 0, dynamic: 0 },
+    'Music': { eq: [65, 60, 50, 45, 55, 60, 65, 70, 65], boost: 120, clarity: 60, ambience: 40, bass: 70, dynamic: 50 },
+    'Movies': { eq: [75, 70, 50, 40, 60, 55, 65, 75, 80], boost: 150, clarity: 70, ambience: 80, bass: 90, dynamic: 80 },
+    'Gaming': { eq: [55, 45, 40, 50, 75, 80, 85, 70, 60], boost: 130, clarity: 80, ambience: 60, bass: 50, dynamic: 60 },
+    'Voice': { eq: [40, 40, 50, 65, 80, 85, 75, 60, 50], boost: 110, clarity: 90, ambience: 10, bass: 20, dynamic: 30 },
+  };
+
+  const allPresets = { ...defaultPresets, ...customPresets };
+
+  // Load custom presets on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('customPresets');
+    if (saved) {
+      setCustomPresets(JSON.parse(saved));
+    }
+
+    if (window.api && window.api.onHotkeyAction) {
+      window.api.onHotkeyAction((action) => {
+        if (action === 'volume-up') {
+          setMasterBoost(prev => Math.min(300, prev + 10));
+        } else if (action === 'volume-down') {
+          setMasterBoost(prev => Math.max(100, prev - 10));
+        }
+      });
+    }
+
+    // Simulated Visualizer Loop since desktop capture needs permission dialogs
+    const visualizerInterval = setInterval(() => {
+      if (isOn) {
+        setAudioLevel(Math.random() * 0.5 + 0.5); // Random intensity
+      } else {
+        setAudioLevel(0.1);
+      }
+    }, 150);
+
+    return () => clearInterval(visualizerInterval);
+  }, [isOn]);
+
+  const applyPreset = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const name = e.target.value;
+    // @ts-ignore
+    const preset = allPresets[name];
+    if (preset) {
+      setEqValues(preset.eq);
+      setMasterBoost(preset.boost);
+      setClarity(preset.clarity);
+      setAmbience(preset.ambience);
+      setBassBoost(preset.bass);
+      setDynamicBoost(preset.dynamic);
+    }
+  };
+
+  const savePreset = () => {
+    if (!presetName) return alert("Please enter a preset name");
+    const newPresets = { ...customPresets, [presetName]: { eq: eqValues, boost: masterBoost, clarity, ambience, bass: bassBoost, dynamic: dynamicBoost } };
+    setCustomPresets(newPresets);
+    localStorage.setItem('customPresets', JSON.stringify(newPresets));
+    setPresetName('');
+    alert("Preset saved!");
+  };
+
+  const resetToDefault = () => {
+    setEqValues([...defaultEq]);
+    setMasterBoost(100);
+    setClarity(0);
+    setAmbience(0);
+    setBassBoost(0);
+    setDynamicBoost(0);
+  };
+
   const generatePath = () => {
-    // We map 9 points horizontally
-    const width = 100; // percent
+    const width = 100;
     const step = width / (bands.length - 1);
     
-    const points = eqValues.map((val, idx) => {
+    const visualEq = eqValues.map((val, idx) => {
+      let finalVal = val;
+      if (idx <= 1) finalVal += (bassBoost * 0.3);
+      if (idx >= 4 && idx <= 6) finalVal += (clarity * 0.2);
+      
+      // Add visualizer bounce
+      if (isOn) {
+        finalVal += (Math.random() * 10 * audioLevel);
+      }
+
+      return Math.min(100, Math.max(0, finalVal));
+    });
+
+    const points = visualEq.map((val, idx) => {
       const x = idx * step;
-      // Invert Y because SVG 0 is at top, slider 0 is at bottom
       const y = 100 - val; 
       return `${idx === 0 ? 'M' : 'L'} ${x} ${y}`;
     }).join(' ');
@@ -27,134 +116,109 @@ function App() {
     return points;
   };
 
-  const handleMasterBoostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    setMasterBoost(val);
-    if (isOn && window.api && window.api.setMasterBoost) {
-      window.api.setMasterBoost(val);
-    }
-  };
-
-  // Toggle effect
   useEffect(() => {
-    if (window.api && window.api.setMasterBoost) {
+    if (window.api) {
       if (isOn) {
-        window.api.setMasterBoost(masterBoost);
+        const finalBoost = Math.min(300, masterBoost + (dynamicBoost * 0.5));
+        if (window.api.setMasterBoost) window.api.setMasterBoost(finalBoost);
+
+        const finalEq = eqValues.map((val, idx) => {
+          let v = val;
+          if (idx <= 1) v += (bassBoost * 0.3);
+          if (idx >= 4 && idx <= 6) v += (clarity * 0.2);
+          return Math.min(100, Math.max(0, v));
+        });
+        if (window.api.setEqBands) window.api.setEqBands(finalEq);
       } else {
-        window.api.setMasterBoost(100); // 100% is normal volume
+        if (window.api.setMasterBoost) window.api.setMasterBoost(100);
+        if (window.api.setEqBands) window.api.setEqBands(defaultEq);
       }
     }
-  }, [isOn]);
+  }, [isOn, eqValues, masterBoost, bassBoost, clarity, dynamicBoost]);
 
   return (
     <div className="app-container">
-      {/* Header */}
       <header className="header">
         <div className="brand">
           <span className="brand-icon">ılı.</span> WinAudio Booster Pro
         </div>
         
-        <div className="device-selector">
-          <select className="device-dropdown">
-            <option>System Default (Speakers)</option>
-            <option>Headphones (Realtek)</option>
+        <div className="device-selector" style={{ display: 'flex', gap: '10px' }}>
+          <select className="device-dropdown" onChange={applyPreset}>
+            <option value="Custom">-- Select Preset --</option>
+            {Object.keys(allPresets).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
+          <input 
+            type="text" 
+            placeholder="Preset Name" 
+            value={presetName}
+            onChange={e => setPresetName(e.target.value)}
+            style={{ background: 'rgba(0,0,0,0.4)', color: 'white', border: '1px solid #333', borderRadius: '4px', padding: '4px' }}
+          />
+          <button className="reset-btn" onClick={savePreset} style={{ color: 'var(--accent)' }}>Save</button>
+          <button className="reset-btn" onClick={resetToDefault}>↻ Reset</button>
         </div>
 
         <button 
           className={`power-btn ${isOn ? 'active' : ''}`}
           onClick={() => setIsOn(!isOn)}
-          title={isOn ? "Turn Off Boost" : "Turn On Boost"}
         >
           {isOn ? 'ON' : 'OFF'}
         </button>
       </header>
 
-      {/* Visualizer */}
       <div className="visualizer-container">
-        <div className={`visualizer-line ${isOn ? 'active' : ''}`}></div>
+        <div 
+          className="visualizer-line" 
+          style={{ 
+            opacity: isOn ? 1 : 0.3,
+            transform: `scaleY(${audioLevel * 3})`,
+            transition: 'transform 0.1s ease-out'
+          }}
+        ></div>
       </div>
 
       <div className="controls-row">
-        {/* Sidebar Controls */}
         <div className="sidebar">
           <div className="slider-group">
             <div className="slider-header">
-              <span className="slider-label">Master Volume</span>
+              <span className="slider-label">Master Volume (Ctrl+Alt+Up)</span>
               <span className="slider-value">{masterBoost}%</span>
             </div>
-            <input 
-              type="range" 
-              min="100" 
-              max="300" 
-              value={masterBoost}
-              disabled={!isOn}
-              onChange={handleMasterBoostChange}
-            />
+            <input type="range" min="100" max="300" value={masterBoost} disabled={!isOn} onChange={(e) => setMasterBoost(Number(e.target.value))} />
           </div>
           
           <div className="slider-group" style={{ marginTop: '10px' }}>
-            <div className="slider-header">
-              <span className="slider-label">Clarity</span>
-              <span className="slider-value">50</span>
-            </div>
-            <input type="range" defaultValue="50" disabled={!isOn} />
+            <div className="slider-header"><span className="slider-label">Clarity</span><span className="slider-value">{clarity}</span></div>
+            <input type="range" value={clarity} onChange={(e) => setClarity(Number(e.target.value))} disabled={!isOn} />
           </div>
           
           <div className="slider-group">
-            <div className="slider-header">
-              <span className="slider-label">Ambience</span>
-              <span className="slider-value">30</span>
-            </div>
-            <input type="range" defaultValue="30" disabled={!isOn} />
+            <div className="slider-header"><span className="slider-label">Ambience</span><span className="slider-value">{ambience}</span></div>
+            <input type="range" value={ambience} onChange={(e) => setAmbience(Number(e.target.value))} disabled={!isOn} />
           </div>
           
           <div className="slider-group">
-            <div className="slider-header">
-              <span className="slider-label">Dynamic Boost</span>
-              <span className="slider-value">70</span>
-            </div>
-            <input type="range" defaultValue="70" disabled={!isOn} />
+            <div className="slider-header"><span className="slider-label">Dynamic Boost</span><span className="slider-value">{dynamicBoost}</span></div>
+            <input type="range" value={dynamicBoost} onChange={(e) => setDynamicBoost(Number(e.target.value))} disabled={!isOn} />
           </div>
           
           <div className="slider-group">
-            <div className="slider-header">
-              <span className="slider-label">Bass Boost</span>
-              <span className="slider-value">40</span>
-            </div>
-            <input type="range" defaultValue="40" disabled={!isOn} />
+            <div className="slider-header"><span className="slider-label">Bass Boost</span><span className="slider-value">{bassBoost}</span></div>
+            <input type="range" value={bassBoost} onChange={(e) => setBassBoost(Number(e.target.value))} disabled={!isOn} />
           </div>
         </div>
 
-        {/* Main Equalizer */}
         <div className="main-eq">
           <div className="eq-container">
-            {/* Dynamic SVG Line matching EQ Sliders */}
-            <svg 
-              className="eq-svg-overlay"
-              viewBox="0 0 100 100" 
-              preserveAspectRatio="none"
-              style={{ opacity: isOn ? 1 : 0.3 }}
-            >
-               <path 
-                 d={generatePath()} 
-                 stroke="var(--accent)" 
-                 strokeWidth="2" 
-                 vectorEffect="non-scaling-stroke"
-                 fill="none" 
-               />
+            <svg className="eq-svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ opacity: isOn ? 1 : 0.3, transition: 'all 0.1s' }}>
+               <path d={generatePath()} stroke="var(--accent)" strokeWidth="2" vectorEffect="non-scaling-stroke" fill="none" />
             </svg>
             
             {bands.map((freq, idx) => (
               <div className="eq-band" key={idx}>
                 <div className="eq-slider-wrapper">
-                  <input 
-                    type="range" 
-                    className="eq-slider" 
-                    value={eqValues[idx]} 
-                    min="0" 
-                    max="100"
-                    disabled={!isOn}
+                  <input type="range" className="eq-slider" value={eqValues[idx]} min="0" max="100" disabled={!isOn}
                     onChange={(e) => {
                       const newVal = Number(e.target.value);
                       const newEqs = [...eqValues];

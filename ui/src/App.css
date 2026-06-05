@@ -92,6 +92,24 @@ body {
   border-color: rgba(255,255,255,0.1);
 }
 
+.reset-btn {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.reset-btn:hover {
+  background: var(--accent-dim);
+  color: var(--text-main);
+  border-color: var(--accent);
+}
+
 .power-btn {
   background: transparent;
   color: var(--accent);
