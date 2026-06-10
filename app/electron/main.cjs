@@ -26,6 +26,7 @@ const ENGINE_SYS32 = path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 
 let mainWindow = null;
 let tray = null;
 let engineInstalled = false;
+let engineActive = false;
 
 // Current DSP parameters (mirrors src/dsp/Parameters.h units).
 const state = {
@@ -42,6 +43,16 @@ const state = {
 // =============================================================================
 function checkEngineInstalled() {
   engineInstalled = fs.existsSync(ENGINE_SYS32);
+  if (engineInstalled) {
+    try {
+      const output = execFileSync('tasklist.exe', ['/m', 'BoosterAPO.dll'], { encoding: 'utf8', windowsHide: true });
+      engineActive = output.toLowerCase().includes('audiodg.exe');
+    } catch (e) {
+      engineActive = false;
+    }
+  } else {
+    engineActive = false;
+  }
   return engineInstalled;
 }
 
@@ -64,7 +75,7 @@ function runElevatedPS(scriptPath, args = []) {
 // boostPercent (UI 0..500) -> engine parameters
 // =============================================================================
 function boostPercentToPreampDb(percent) {
-  const ratio = Math.max(1, percent) / 100.0; // 100% = 0 dB
+  const ratio = Math.max(1.0, percent / 100.0); // أقل من 100% = 0 dB، ما يكتمش أبدًا
   return 20.0 * Math.log10(ratio);
 }
 
@@ -98,7 +109,7 @@ function createWindow() {
 
 function pushStatus() {
   if (!mainWindow) return;
-  mainWindow.webContents.send('engine-status', { installed: engineInstalled });
+  mainWindow.webContents.send('engine-status', { installed: engineInstalled, active: engineActive });
   mainWindow.webContents.send('license-status', licensing.status());
 }
 
@@ -130,6 +141,16 @@ else {
     createTray();
     mainWindow.webContents.on('did-finish-load', pushStatus);
 
+    // Periodically poll engine status to detect when audiodg loads the APO
+    setInterval(() => {
+      const prevInstalled = engineInstalled;
+      const prevActive = engineActive;
+      checkEngineInstalled();
+      if (engineInstalled !== prevInstalled || engineActive !== prevActive) {
+        pushStatus();
+      }
+    }, 3000);
+
     globalShortcut.register('CommandOrControl+Alt+Up',   () => mainWindow.webContents.send('hotkey', 'up'));
     globalShortcut.register('CommandOrControl+Alt+Down', () => mainWindow.webContents.send('hotkey', 'down'));
     globalShortcut.register('CommandOrControl+Alt+B',    () => { state.enabled = !state.enabled; publish(); });
@@ -142,7 +163,7 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 // =============================================================================
 // IPC
 // =============================================================================
-ipcMain.handle('get-status', () => ({ installed: engineInstalled, license: licensing.status() }));
+ipcMain.handle('get-status', () => ({ installed: engineInstalled, active: engineActive, license: licensing.status() }));
 
 ipcMain.on('set-params', (_e, partial) => {
   // Clamp boost to the licensed maximum.

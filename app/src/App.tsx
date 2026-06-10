@@ -23,7 +23,7 @@ export default function App() {
   const [licenseMsg, setLicenseMsg] = useState('')
 
   // Native engine status + license come from the main process.
-  const { engineInstalled, license } = useEngine()
+  const { engineInstalled, engineActive, license } = useEngine()
 
   // Live audio parameters.
   const [boost, setBoost] = useState(150)
@@ -120,7 +120,7 @@ export default function App() {
         onDeletePreset={() => { setModal('delete'); setMenuOpen(false) }}
       />
 
-      <EngineBar t={t} engineInstalled={engineInstalled} onInstall={() => window.api?.installEngine()} />
+      <EngineBar t={t} engineInstalled={engineInstalled} engineActive={engineActive} onInstall={() => window.api?.installEngine()} />
 
       <TopBar t={t} current={current} presetNames={Object.keys(allPresets)} onSelect={loadPreset} bars={bars} isOn={isOn} />
 

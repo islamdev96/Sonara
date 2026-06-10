@@ -3,14 +3,28 @@ import type { Strings } from '../i18n'
 type EngineBarProps = {
   t: Strings
   engineInstalled: boolean
+  engineActive: boolean
   onInstall: () => void
 }
 
-export default function EngineBar({ t, engineInstalled, onInstall }: EngineBarProps) {
+export default function EngineBar({ t, engineInstalled, engineActive, onInstall }: EngineBarProps) {
+  let dotClass = 'red';
+  let text = t.engineMissing;
+
+  if (engineInstalled) {
+    if (engineActive) {
+      dotClass = 'green';
+      text = t.engineProcessing;
+    } else {
+      dotClass = 'orange';
+      text = t.engineInstalled;
+    }
+  }
+
   return (
     <div className="engine-bar">
-      <div className={`engine-dot ${engineInstalled ? 'green' : 'red'}`} />
-      <span className="engine-text">{engineInstalled ? t.engineActive : t.engineMissing}</span>
+      <div className={`engine-dot ${dotClass}`} />
+      <span className="engine-text">{text}</span>
       {!engineInstalled && <button className="engine-btn" onClick={onInstall}>{t.install}</button>}
     </div>
   )

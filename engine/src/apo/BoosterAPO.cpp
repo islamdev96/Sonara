@@ -147,9 +147,9 @@ STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPER
         break;
     case BUFFER_VALID:
     default:
-        // Poll parameters at most ~every 480 frames (~10 ms @ 48k) to keep the
-        // RT cost low while staying responsive to UI changes.
-        if ((m_frameCounter++ & 0x1FF) == 0) {
+        // Poll parameters every 4 calls (~40 ms) to stay responsive
+        // to UI changes while keeping RT thread overhead minimal.
+        if ((m_frameCounter++ & 0x3) == 0) {
             wab::dsp::Parameters p;
             if (m_params.read(p)) m_engine.updateParameters(p);
         }
