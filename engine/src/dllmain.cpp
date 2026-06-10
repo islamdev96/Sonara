@@ -1,9 +1,11 @@
 // dllmain.cpp - COM server entry points + self-registration for the
 // self-contained Booster APO. regsvr32 BoosterAPO.dll registers the COM object
 // AND the APO so Windows will load it into the audio engine.
+#include <initguid.h>
 #include <windows.h>
 #include <unknwn.h>
 #include <strsafe.h>
+#include <olectl.h>
 #include "apo/BoosterAPO.h"
 #include "apo/ClassFactory.h"
 

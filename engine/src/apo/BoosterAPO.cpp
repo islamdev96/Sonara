@@ -4,30 +4,39 @@
 #include <new>
 #include <cstring>
 
-// Registration properties advertised to the audio engine.
-static APO_REG_PROPERTIES g_RegProps = {
-    CLSID_BoosterAPO,                                  // clsid
-    APO_FLAG_DEFAULT,                                  // flags
-    L"Sonara Engine",                    // friendly name
-    L"Copyright (c) Sonara",             // copyright
-    1, 1,                                              // major/minor version
-    __uuidof(IAudioProcessingObject),                  // we implement APO
-};
+extern LONG g_cDllRef;
 
-CBoosterAPO::CBoosterAPO() {
+// Registration properties advertised to the audio engine.
+static const CRegAPOProperties<1> g_RegProps(
+    CLSID_BoosterAPO,
+    L"Sonara Engine",
+    L"Copyright (c) Sonara",
+    1, 1,
+    __uuidof(IAudioProcessingObject),
+    APO_FLAG_DEFAULT
+);
+
+CBoosterAPO::CBoosterAPO() : CBaseAudioProcessingObject(g_RegProps) {
+    InterlockedIncrement(&g_cDllRef);
     // Open the shared parameter section. If it does not exist yet the engine
     // simply runs at unity until the UI publishes settings.
-    m_params.openOrCreate();
+    m_params.open();
 }
 
-CBoosterAPO::~CBoosterAPO() { m_params.close(); }
+CBoosterAPO::~CBoosterAPO() {
+    m_params.close();
+    InterlockedDecrement(&g_cDllRef);
+}
 
 STDMETHODIMP CBoosterAPO::QueryInterface(REFIID riid, void** ppv) {
     if (!ppv) return E_POINTER;
-    if (riid == __uuidof(IUnknown) ||
-        riid == __uuidof(IAudioProcessingObject) ||
-        riid == __uuidof(IAudioProcessingObjectConfiguration) ||
-        riid == __uuidof(IAudioProcessingObjectRT)) {
+    if (riid == __uuidof(IUnknown)) {
+        *ppv = static_cast<IAudioProcessingObject*>(this);
+    } else if (riid == __uuidof(IAudioProcessingObject)) {
+        *ppv = static_cast<IAudioProcessingObject*>(this);
+    } else if (riid == __uuidof(IAudioProcessingObjectConfiguration)) {
+        *ppv = static_cast<IAudioProcessingObjectConfiguration*>(this);
+    } else if (riid == __uuidof(IAudioProcessingObjectRT)) {
         *ppv = static_cast<IAudioProcessingObjectRT*>(this);
     } else if (riid == __uuidof(IAudioSystemEffects) ||
                riid == __uuidof(IAudioSystemEffects2)) {
@@ -59,10 +68,34 @@ STDMETHODIMP CBoosterAPO::GetLatency(HNSTIME* pTime) {
     return S_OK;
 }
 
-STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType*, IAudioMediaType* pReq,
+STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMediaType* pReq,
                                                  IAudioMediaType** ppSup) {
-    // We operate in-place on 32-bit float PCM. Accept the requested format.
-    if (ppSup) { *ppSup = pReq; if (pReq) pReq->AddRef(); }
+    if (!pReq) return E_POINTER;
+    
+    UNCOMPRESSEDAUDIOFORMAT fmt = {};
+    HRESULT hr = pReq->GetUncompressedAudioFormat(&fmt);
+    if (FAILED(hr)) return hr;
+    
+    // We only support IEEE Float.
+    if (fmt.guidFormatType != KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
+        return APOERR_FORMAT_NOT_SUPPORTED;
+    }
+    
+    // If output format is specified, ensure it matches input parameters.
+    if (pOpp) {
+        UNCOMPRESSEDAUDIOFORMAT oppFmt = {};
+        if (SUCCEEDED(pOpp->GetUncompressedAudioFormat(&oppFmt))) {
+            if (oppFmt.dwSamplesPerFrame != fmt.dwSamplesPerFrame ||
+                oppFmt.fFramesPerSecond != fmt.fFramesPerSecond) {
+                return APOERR_FORMAT_NOT_SUPPORTED;
+            }
+        }
+    }
+    
+    if (ppSup) {
+        *ppSup = pReq;
+        pReq->AddRef();
+    }
     return S_OK;
 }
 
@@ -71,13 +104,16 @@ STDMETHODIMP CBoosterAPO::LockForProcess(UINT32 cInput, APO_CONNECTION_DESCRIPTO
     HRESULT hr = CBaseAudioProcessingObject::LockForProcess(cInput, ppInput, cOutput, ppOutput);
     if (FAILED(hr)) return hr;
 
-    // Pull the negotiated format from the base class.
+    // Pull the negotiated format from the input connections.
     UNCOMPRESSEDAUDIOFORMAT fmt = {};
-    if (m_pInputFormat) m_pInputFormat->GetUncompressedAudioFormat(&fmt);
+    if (cInput > 0 && ppInput && ppInput[0] && ppInput[0]->pFormat) {
+        ppInput[0]->pFormat->GetUncompressedAudioFormat(&fmt);
+    }
     m_channels   = fmt.dwSamplesPerFrame ? fmt.dwSamplesPerFrame : 2;
     m_sampleRate = fmt.fFramesPerSecond ? fmt.fFramesPerSecond : 48000.0f;
 
     m_engine.prepare(m_sampleRate, (int)m_channels);
+    m_params.open(); // Retry opening the file if it wasn't available at startup
     wab::dsp::Parameters p;
     if (m_params.read(p)) m_engine.updateParameters(p);
     m_locked = true;

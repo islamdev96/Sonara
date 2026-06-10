@@ -21,22 +21,32 @@ endif()
 #   cmake -B build -A x64 && cmake --build build --config Release
 # =============================================================================
 if(WIN32 AND MSVC)
-    # The WDK ships BaseAudioProcessingObject.lib + audioenginebaseapo.h.
+    # The WDK/SDK ships audiobaseprocessingobject.lib + audioenginebaseapo.h.
     find_path(WDK_APO_INCLUDE audioenginebaseapo.h
         HINTS "$ENV{WDKContentRoot}/Include"
+        PATHS "C:/Program Files (x86)/Windows Kits/10/Include/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/um"
+              "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/um"
         PATH_SUFFIXES "um" "shared")
-    find_library(WDK_APO_LIB NAMES BaseAudioProcessingObject
-        HINTS "$ENV{WDKContentRoot}/Lib")
+    find_library(WDK_APO_LIB NAMES audiobaseprocessingobject AudioBaseProcessingObjectV140 BaseAudioProcessingObject
+        HINTS "$ENV{WDKContentRoot}/Lib"
+        PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/um/x64"
+              "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64"
+        PATH_SUFFIXES "um" "lib")
+    find_library(WDK_MEDIA_TYPE_LIB NAMES audiomediatypecrt
+        HINTS "$ENV{WDKContentRoot}/Lib"
+        PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/um/x64"
+              "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64"
+        PATH_SUFFIXES "um" "lib")
 
     add_library(BoosterAPO SHARED
         src/dllmain.cpp
         src/apo/BoosterAPO.cpp
         src/apo/ClassFactory.cpp
+        src/BoosterAPO.def
     )
-    target_compile_definitions(BoosterAPO PRIVATE UNICODE _UNICODE)
+    target_compile_definitions(BoosterAPO PRIVATE UNICODE _UNICODE NOMINMAX)
     set_target_properties(BoosterAPO PROPERTIES
-        OUTPUT_NAME "BoosterAPO"
-        LINK_FLAGS "/DEF:${CMAKE_SOURCE_DIR}/src/BoosterAPO.def")
+        OUTPUT_NAME "BoosterAPO")
 
     if(WDK_APO_INCLUDE)
         target_include_directories(BoosterAPO PRIVATE ${WDK_APO_INCLUDE})
@@ -46,5 +56,6 @@ if(WIN32 AND MSVC)
 
     target_link_libraries(BoosterAPO PRIVATE
         ole32 oleaut32 uuid propsys avrt ksuser
-        $<$<BOOL:${WDK_APO_LIB}>:${WDK_APO_LIB}>)
+        $<$<BOOL:${WDK_APO_LIB}>:${WDK_APO_LIB}>
+        $<$<BOOL:${WDK_MEDIA_TYPE_LIB}>:${WDK_MEDIA_TYPE_LIB}>)
 endif()

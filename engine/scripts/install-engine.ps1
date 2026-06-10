@@ -38,19 +38,40 @@ Write-Host "Copied engine to $dest"
 & regsvr32.exe /s $dest
 Write-Host 'Registered COM/APO server.'
 
-# 3) Resolve the target endpoint registry path.
+# 3) Resolve target endpoints.
 $base = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
-if ([string]::IsNullOrWhiteSpace($DeviceId)) {
-  # Pick the device that is currently the default (State = 1, role default).
-  $DeviceId = (Get-ChildItem $base | Sort-Object Name | Select-Object -First 1).PSChildName
-}
-$fx = Join-Path $base "$DeviceId\FxProperties"
-if (!(Test-Path $fx)) { New-Item -Path $fx -Force | Out-Null }
+$devices = @()
 
-# 4) Attach our APO CLSID to the SFX and MFX slots.
-New-ItemProperty -Path $fx -Name $PKEY_SFX -PropertyType String -Value $ClsidSfx -Force | Out-Null
-New-ItemProperty -Path $fx -Name $PKEY_MFX -PropertyType String -Value $ClsidSfx -Force | Out-Null
-Write-Host "Attached engine to endpoint $DeviceId"
+if ([string]::IsNullOrWhiteSpace($DeviceId)) {
+  # Query the registry to find all active render endpoints (DeviceState = 1)
+  $activeDevices = Get-ChildItem $base | Where-Object {
+    (Get-ItemProperty -Path $_.PSPath -Name DeviceState -ErrorAction SilentlyContinue).DeviceState -eq 1
+  }
+  
+  # Fallback to all devices if no active devices are found
+  if (-not $activeDevices) {
+    $devices = Get-ChildItem $base
+  } else {
+    $devices = $activeDevices
+  }
+} else {
+  $devices = Get-ChildItem $base | Where-Object { $_.PSChildName -eq $DeviceId }
+}
+
+# 4) Attach our APO CLSID to the SFX and MFX slots for all target devices.
+if ($devices.Count -eq 0) {
+  Write-Warning "No target audio devices found to attach the engine."
+} else {
+  foreach ($dev in $devices) {
+    $devId = $dev.PSChildName
+    $fx = Join-Path $base "$devId\FxProperties"
+    if (!(Test-Path $fx)) { New-Item -Path $fx -Force | Out-Null }
+    
+    New-ItemProperty -Path $fx -Name $PKEY_SFX -PropertyType String -Value $ClsidSfx -Force | Out-Null
+    New-ItemProperty -Path $fx -Name $PKEY_MFX -PropertyType String -Value $ClsidSfx -Force | Out-Null
+    Write-Host "Attached engine to endpoint $devId"
+  }
+}
 
 # 5) Restart the audio service so audiodg reloads the effect chain.
 Restart-Service -Name Audiosrv -Force

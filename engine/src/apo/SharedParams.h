@@ -20,30 +20,22 @@ class SharedParams {
 public:
     ~SharedParams() { close(); }
 
-    bool openOrCreate() {
-        close();
+    bool open() {
+        if (view_) return true; // self-healing: exit if already open
         wchar_t path[MAX_PATH];
         if (!resolvePath(path, MAX_PATH)) return false;
 
-        hFile_ = CreateFileW(path, GENERIC_READ | GENERIC_WRITE,
+        // Open read-only to support sandboxed audiodg.exe execution
+        hFile_ = CreateFileW(path, GENERIC_READ,
                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                             OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile_ == INVALID_HANDLE_VALUE) { hFile_ = nullptr; return false; }
 
-        // Ensure the file is at least sizeof(Parameters) and seeded once.
-        LARGE_INTEGER sz{}; GetFileSizeEx(hFile_, &sz);
-        if (sz.QuadPart < (LONGLONG)sizeof(dsp::Parameters)) {
-            dsp::Parameters def{}; DWORD wrote = 0;
-            SetFilePointer(hFile_, 0, nullptr, FILE_BEGIN);
-            WriteFile(hFile_, &def, sizeof(def), &wrote, nullptr);
-            FlushFileBuffers(hFile_);
-        }
-
-        hMap_ = CreateFileMappingW(hFile_, nullptr, PAGE_READWRITE, 0,
+        hMap_ = CreateFileMappingW(hFile_, nullptr, PAGE_READONLY, 0,
                                    sizeof(dsp::Parameters), nullptr);
         if (!hMap_) { close(); return false; }
         view_ = reinterpret_cast<dsp::Parameters*>(
-            MapViewOfFile(hMap_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(dsp::Parameters)));
+            MapViewOfFile(hMap_, FILE_MAP_READ, 0, 0, sizeof(dsp::Parameters)));
         if (!view_) { close(); return false; }
         return true;
     }
@@ -53,6 +45,11 @@ public:
         if (!view_) return false;
         for (int i = 0; i < 4; ++i) {
             const uint32_t s1 = view_->seq; MemoryBarrier();
+            if (s1 == 0) {
+                // Write in progress by the UI. Yield and try again.
+                Sleep(0);
+                continue;
+            }
             out = *view_;                   MemoryBarrier();
             const uint32_t s2 = view_->seq;
             if (s1 == s2 && out.magic == dsp::kParamMagic) return true;
@@ -60,12 +57,8 @@ public:
         return out.magic == dsp::kParamMagic;
     }
 
-    // Writer (also usable by a native UI build / tests).
-    void write(dsp::Parameters p) {
-        if (!view_) return;
-        p.magic = dsp::kParamMagic; p.version = dsp::kParamVersion;
-        p.seq = ++writeSeq_; MemoryBarrier();
-        *view_ = p; MemoryBarrier(); view_->seq = p.seq;
+    void write(dsp::Parameters) {
+        // Disabled in read-only engine mode
     }
 
     void close() {

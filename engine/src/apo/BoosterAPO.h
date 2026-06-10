@@ -22,7 +22,7 @@ DEFINE_GUID(CLSID_BoosterAPO,
 // Long-running identifier used in the registry APO registration.
 class __declspec(uuid("A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C")) CBoosterAPO;
 
-LONG_PTR APOERR_DEFAULT = 0;
+constexpr LONG_PTR APOERR_DEFAULT = 0;
 
 class CBoosterAPO :
     public CBaseAudioProcessingObject,

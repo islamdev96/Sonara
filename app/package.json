@@ -19,6 +19,7 @@
   "build": {
     "appId": "app.sonara.desktop",
     "productName": "Sonara",
+    "publish": null,
     "directories": { "output": "release", "buildResources": "build" },
     "files": ["dist/**/*", "electron/**/*"],
     "extraResources": [
