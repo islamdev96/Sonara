@@ -5,7 +5,6 @@
 #include <cstring>
 
 extern LONG g_cDllRef;
-
 // Registration properties advertised to the audio engine.
 static const CRegAPOProperties<1> g_RegProps(
     CLSID_BoosterAPO,

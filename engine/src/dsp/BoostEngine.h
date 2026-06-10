@@ -33,6 +33,9 @@ public:
         comp_.prepare(sr_);
         limiter_.prepare(sr_, ch_);
         widener_.prepare(sr_);
+        // ~15 ms one-pole smoothing for the master gains: removes the audible
+        // click / "zipper noise" when the user drags the boost or volume slider.
+        gainSmoothCoef_ = 1.0f - std::exp(-1.0f / (0.015f * static_cast<float>(sr_)));
         lastSeq_ = 0xFFFFFFFFu;
         applyParams(current_, /*force=*/true);
     }
@@ -53,11 +56,21 @@ public:
         ScopedNoDenormals noDenormals; // flush subnormals -> no CPU spikes on quiet tails
 
         const int ch = ch_;
-        const float preamp = preampLin_;
         const int* activeEq = activeEq_;
         const int nActiveEq = nActiveEq_;
+        // Smoothed master gains: ramp per frame toward target to avoid zipper noise.
+        const float smCoef  = gainSmoothCoef_;
+        const float preTgt  = preampTarget_;
+        const float outTgt  = outGainTarget_;
+        float preamp  = preampLin_;
+        float outGain = outGainLin_;
+        const bool outGainActive = (outTgt != 1.0f) || (outGain != 1.0f);
         for (int n = 0; n < frameCount; ++n) {
             float* f = buffer + static_cast<size_t>(n) * ch;
+
+            // Ramp master gains toward their targets (click-free slider moves).
+            preamp += (preTgt - preamp) * smCoef;
+            if (outGainActive) outGain += (outTgt - outGain) * smCoef;
 
             // 1) Preamp (the boost) + per-channel EQ + shelves.
             float detect = 0.0f;
@@ -81,11 +94,14 @@ public:
             if (ch >= 2 && stereoOn_) widener_.processStereo(f[0], f[1]);
 
             // 4) Output trim.
-            if (outGainLin_ != 1.0f) for (int c = 0; c < ch; ++c) f[c] *= outGainLin_;
+            if (outGainActive) for (int c = 0; c < ch; ++c) f[c] *= outGain;
 
             // 5) Brickwall limiter (safety - prevents any clipping).
             if (current_.limiterOn) limiter_.processFrame(f, ch);
         }
+        // Persist smoothed gain state across process() calls.
+        preampLin_  = preamp;
+        outGainLin_ = outGain;
     }
 
     void reset() noexcept {
@@ -104,8 +120,9 @@ private:
         if (!force && p.seq == lastSeq_) return;
         lastSeq_ = p.seq;
 
-        preampLin_  = dbToLin(p.preampDb);
-        outGainLin_ = dbToLin(p.outputGainDb);
+        preampTarget_  = dbToLin(p.preampDb);
+        outGainTarget_ = dbToLin(p.outputGainDb);
+        if (force) { preampLin_ = preampTarget_; outGainLin_ = outGainTarget_; }
 
         // 10-band parametric EQ (Q ~ 1.4 for musical overlap). A band left flat
         // (~0 dB) is an identity filter, so we skip it entirely on the audio
@@ -146,7 +163,9 @@ private:
     Parameters current_{};
     uint32_t lastSeq_ = 0xFFFFFFFFu;
 
-    float preampLin_ = 1.0f, outGainLin_ = 1.0f;
+    float preampLin_ = 1.0f, outGainLin_ = 1.0f;       // smoothed current gains
+    float preampTarget_ = 1.0f, outGainTarget_ = 1.0f; // ramp targets
+    float gainSmoothCoef_ = 1.0f;                      // per-frame ramp coefficient
     bool  bassOn_ = false, clarityOn_ = false, compOn_ = false, stereoOn_ = false;
 
     std::vector<Biquad> eq_;       // ch_ * kNumEqBands
