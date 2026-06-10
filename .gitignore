@@ -1,0 +1,27 @@
+# Build output
+/build/
+/build-tests/
+*.obj
+*.lib
+*.exp
+*.pdb
+*.dll
+*.exe
+dsp_test
+
+# Node / app
+app/node_modules/
+app/dist/
+app/release/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Secrets (never commit license private keys)
+*.pem
+*.key
+private-key*

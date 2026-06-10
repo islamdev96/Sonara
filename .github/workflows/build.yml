@@ -1,0 +1,49 @@
+name: build
+
+on:
+  push: { branches: [main] }
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # 1) Portable DSP engine tests - run on Linux, fast, gate every change.
+  dsp-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build & run DSP tests
+        run: |
+          g++ -std=c++20 -O2 -Wall engine/test/dsp_test.cpp -o dsp_test
+          ./dsp_test
+
+  # 2) Build the native APO engine (needs MSVC + WDK on Windows).
+  engine:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install WDK
+        run: choco install windowsdriverkit11 -y
+      - name: Configure & build APO
+        run: |
+          cmake -S engine -B build -A x64
+          cmake --build build --config Release
+      - uses: actions/upload-artifact@v4
+        with: { name: BoosterAPO-dll, path: build/Release/BoosterAPO.dll }
+
+  # 3) Build the Electron app + NSIS installer.
+  app:
+    needs: [dsp-tests, engine]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/download-artifact@v4
+        with: { name: BoosterAPO-dll, path: build/Release }
+      - name: Build installer
+        working-directory: app
+        run: |
+          npm ci
+          npm run dist
+      - uses: actions/upload-artifact@v4
+        with: { name: Sonara-Setup, path: app/release/*.exe }
