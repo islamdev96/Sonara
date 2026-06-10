@@ -4,6 +4,8 @@
 #include <new>
 #include <cstring>
 
+extern LONG g_cDllRef;
+
 // Registration properties advertised to the audio engine.
 static APO_REG_PROPERTIES g_RegProps = {
     CLSID_BoosterAPO,                                  // clsid
@@ -15,19 +17,26 @@ static APO_REG_PROPERTIES g_RegProps = {
 };
 
 CBoosterAPO::CBoosterAPO() {
+    InterlockedIncrement(&g_cDllRef);
     // Open the shared parameter section. If it does not exist yet the engine
     // simply runs at unity until the UI publishes settings.
-    m_params.openOrCreate();
+    m_params.open();
 }
 
-CBoosterAPO::~CBoosterAPO() { m_params.close(); }
+CBoosterAPO::~CBoosterAPO() {
+    m_params.close();
+    InterlockedDecrement(&g_cDllRef);
+}
 
 STDMETHODIMP CBoosterAPO::QueryInterface(REFIID riid, void** ppv) {
     if (!ppv) return E_POINTER;
-    if (riid == __uuidof(IUnknown) ||
-        riid == __uuidof(IAudioProcessingObject) ||
-        riid == __uuidof(IAudioProcessingObjectConfiguration) ||
-        riid == __uuidof(IAudioProcessingObjectRT)) {
+    if (riid == __uuidof(IUnknown)) {
+        *ppv = static_cast<IAudioProcessingObject*>(this);
+    } else if (riid == __uuidof(IAudioProcessingObject)) {
+        *ppv = static_cast<IAudioProcessingObject*>(this);
+    } else if (riid == __uuidof(IAudioProcessingObjectConfiguration)) {
+        *ppv = static_cast<IAudioProcessingObjectConfiguration*>(this);
+    } else if (riid == __uuidof(IAudioProcessingObjectRT)) {
         *ppv = static_cast<IAudioProcessingObjectRT*>(this);
     } else if (riid == __uuidof(IAudioSystemEffects) ||
                riid == __uuidof(IAudioSystemEffects2)) {
@@ -59,10 +68,34 @@ STDMETHODIMP CBoosterAPO::GetLatency(HNSTIME* pTime) {
     return S_OK;
 }
 
-STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType*, IAudioMediaType* pReq,
+STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMediaType* pReq,
                                                  IAudioMediaType** ppSup) {
-    // We operate in-place on 32-bit float PCM. Accept the requested format.
-    if (ppSup) { *ppSup = pReq; if (pReq) pReq->AddRef(); }
+    if (!pReq) return E_POINTER;
+    
+    UNCOMPRESSEDAUDIOFORMAT fmt = {};
+    HRESULT hr = pReq->GetUncompressedAudioFormat(&fmt);
+    if (FAILED(hr)) return hr;
+    
+    // We only support IEEE Float.
+    if (fmt.guidFormatType != KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
+        return APOERR_FORMAT_NOT_SUPPORTED;
+    }
+    
+    // If output format is specified, ensure it matches input parameters.
+    if (pOpp) {
+        UNCOMPRESSEDAUDIOFORMAT oppFmt = {};
+        if (SUCCEEDED(pOpp->GetUncompressedAudioFormat(&oppFmt))) {
+            if (oppFmt.dwSamplesPerFrame != fmt.dwSamplesPerFrame ||
+                oppFmt.fFramesPerSecond != fmt.fFramesPerSecond) {
+                return APOERR_FORMAT_NOT_SUPPORTED;
+            }
+        }
+    }
+    
+    if (ppSup) {
+        *ppSup = pReq;
+        pReq->AddRef();
+    }
     return S_OK;
 }
 

@@ -32,11 +32,11 @@ if(WIN32 AND MSVC)
         src/dllmain.cpp
         src/apo/BoosterAPO.cpp
         src/apo/ClassFactory.cpp
+        src/BoosterAPO.def
     )
     target_compile_definitions(BoosterAPO PRIVATE UNICODE _UNICODE)
     set_target_properties(BoosterAPO PROPERTIES
-        OUTPUT_NAME "BoosterAPO"
-        LINK_FLAGS "/DEF:${CMAKE_SOURCE_DIR}/src/BoosterAPO.def")
+        OUTPUT_NAME "BoosterAPO")
 
     if(WDK_APO_INCLUDE)
         target_include_directories(BoosterAPO PRIVATE ${WDK_APO_INCLUDE})

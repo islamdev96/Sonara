@@ -52,15 +52,34 @@ function serialize(p) {
   return buf;
 }
 
-// Publish parameters to the engine. Writes seq last by rewriting the whole
-// struct atomically (small enough that a single write is effectively atomic for
-// our seqlock reader, which re-reads on mismatch).
+// Publish parameters to the engine. Writes seq last to ensure the real-time
+// seqlock reader in BoosterAPO never reads a torn parameter state.
 function publish(p) {
   ensureDir();
   seq = (seq + 1) >>> 0;
+  if (seq === 0) seq = 1; // 0 is reserved as our write-in-progress indicator
+  
   const buf = serialize(p);
   try {
-    fs.writeFileSync(PARAMS_FILE, buf);
+    let fd;
+    try {
+      fd = fs.openSync(PARAMS_FILE, 'r+');
+    } catch (_) {
+      // Create the file if it does not exist
+      fd = fs.openSync(PARAMS_FILE, 'w');
+    }
+
+    // Step 1: Write structure with seq = 0 (write in progress)
+    const writeBuf = Buffer.from(buf);
+    writeBuf.writeUInt32LE(0, 8); // Offset of seq field is 8
+    fs.writeSync(fd, writeBuf, 0, writeBuf.length, 0);
+
+    // Step 2: Write actual new sequence number at offset 8 to finalize transaction
+    const seqBuf = Buffer.alloc(4);
+    seqBuf.writeUInt32LE(seq, 0);
+    fs.writeSync(fd, seqBuf, 0, 4, 8);
+
+    fs.closeSync(fd);
     return true;
   } catch (e) {
     console.error('paramBridge write failed:', e.message);

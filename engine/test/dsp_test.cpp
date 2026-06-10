@@ -82,6 +82,7 @@ int main() {
         BoostEngine eng; eng.prepare(sr, ch);
         Parameters p; p.seq = 4; p.preampDb = 12.0f; p.limiterOn = 0; eng.updateParameters(p);
         auto in = makeSine(frames, ch, sr, 440.0, 0.05f);
+        auto warm = in; eng.process(warm.data(), frames); // let gain smoothing settle
         auto out = in; eng.process(out.data(), frames);
         double gainDb = 20.0 * std::log10(rms(out) / rms(in));
         check(std::fabs(gainDb - 12.0) < 0.5, "preamp gain accurate (~+12 dB)");
@@ -126,6 +127,23 @@ int main() {
         const size_t tailLen = (size_t)(0.2 * sr) * ch; // examine last 200 ms
         std::vector<float> tail(buf.end() - tailLen, buf.end());
         check(peak(tail) < 1e-2f, "tail decays toward silence");
+    }
+
+    // 8) Parameter smoothing: a sudden preamp jump must ramp (no click/zipper).
+    {
+        BoostEngine eng; eng.prepare(sr, ch);
+        Parameters p0; p0.seq = 80; p0.preampDb = 0.0f; p0.limiterOn = 0; eng.updateParameters(p0);
+        Parameters p1 = p0; p1.seq = 81; p1.preampDb = 12.0f; eng.updateParameters(p1);
+        std::vector<float> buf((size_t)frames * ch, 0.25f); // constant input -> output tracks gain
+        eng.process(buf.data(), frames);
+        const float target = 0.25f * std::pow(10.0f, 12.0f / 20.0f);
+        bool gentleStart = std::fabs(buf[0] - 0.25f) < 0.05f;      // no instant jump
+        bool converged   = std::fabs(buf[(size_t)(frames - 1) * ch] - target) < 0.02f;
+        float maxStep = 0.0f;
+        for (int n = 1; n < frames; ++n)
+            maxStep = std::max(maxStep, std::fabs(buf[(size_t)n * ch] - buf[(size_t)(n - 1) * ch]));
+        check(gentleStart && converged, "preamp change ramps smoothly (no zipper)");
+        check(maxStep < 0.01f, "no abrupt per-sample gain step");
     }
 
     std::printf(g_fail == 0 ? "\nALL TESTS PASSED\n" : "\n%d TEST(S) FAILED\n", g_fail);

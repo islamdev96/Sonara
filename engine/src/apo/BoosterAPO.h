@@ -26,7 +26,8 @@ LONG_PTR APOERR_DEFAULT = 0;
 
 class CBoosterAPO :
     public CBaseAudioProcessingObject,
-    public IAudioSystemEffects2
+    public IAudioSystemEffects2,
+    public IAudioProcessingObjectRT
 {
 public:
     CBoosterAPO();
