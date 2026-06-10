@@ -21,8 +21,8 @@ $ErrorActionPreference = 'Stop'
 $ClsidSfx = '{A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C}'
 
 # Property keys (PKEY) used by the Windows audio engine for software effects.
-$PKEY_SFX = '{D04E05A6-594B-4FB6-A80D-01AF5EEC5217},5'   # SFX (stream effects) CLSID list
-$PKEY_MFX = '{D04E05A6-594B-4FB6-A80D-01AF5EEC5217},6'   # MFX (mode effects) CLSID list
+$PKEY_SFX = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5'   # SFX (stream effects) CLSID list
+$PKEY_MFX = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6'   # MFX (mode effects) CLSID list
 $PKEY_COMPOSITE = '{D3993A3F-99C2-4402-B5EC-A92A0367664B},5' # composite FX
 
 Write-Host '== Sonara :: engine install ==' -ForegroundColor Cyan
