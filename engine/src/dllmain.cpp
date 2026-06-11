@@ -61,24 +61,22 @@ extern "C" HRESULT STDAPICALLTYPE DllRegisterServer() {
     setKeyStr(HKEY_CLASSES_ROOT, sub, L"ThreadingModel", L"Both");
 
     // 2) APO registration so the audio engine can enumerate the effect.
-    //    HKLM\\...\\Audio\\AudioProcessingObjects\\{CLSID}
+    //    Correct path: HKLM\SOFTWARE\Classes\AudioEngine\AudioProcessingObjects\{CLSID}
     StringCchPrintfW(sub, 256,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\"
-        L"AudioProcessingObjects\\%s", kClsidStr);
+        L"SOFTWARE\\Classes\\AudioEngine\\AudioProcessingObjects\\%s", kClsidStr);
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"FriendlyName", L"Sonara Engine");
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"Copyright", L"Sonara");
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"MajorVersion", L"1");
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"MinorVersion", L"0");
-    // APO flags (1 = APO_FLAG_SAMPLESPERFRAME_MUST_MATCH ... see WDK). Marked as
-    // a software effect that can run in the global stream.
+    // APO flags (5 = stream effect, software effect)
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"Flags", L"5");
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"MinInputConnections", L"1");
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"MaxInputConnections", L"1");
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"MinOutputConnections", L"1");
     setKeyStr(HKEY_LOCAL_MACHINE, sub, L"MaxOutputConnections", L"1");
-    // NOTE: attaching the APO to a specific endpoint's FX property store
-    // (PKEY_FX_*) is done per-device by scripts/install.ps1 because it depends
-    // on which output device the user selects.
+    setKeyStr(HKEY_LOCAL_MACHINE, sub, L"MaxInstances", L"4294967295");
+    setKeyStr(HKEY_LOCAL_MACHINE, sub, L"NumAPOInterfaces", L"1");
+    setKeyStr(HKEY_LOCAL_MACHINE, sub, L"APOInterface0", L"{F141E1E5-9EE0-4E18-AD93-C10A7D498F37}"); // IAudioProcessingObject
     return S_OK;
 }
 
@@ -87,8 +85,7 @@ extern "C" HRESULT STDAPICALLTYPE DllUnregisterServer() {
     StringCchPrintfW(sub, 256, L"CLSID\\%s", kClsidStr);
     RegDeleteTreeW(HKEY_CLASSES_ROOT, sub);
     StringCchPrintfW(sub, 256,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\"
-        L"AudioProcessingObjects\\%s", kClsidStr);
+        L"SOFTWARE\\Classes\\AudioEngine\\AudioProcessingObjects\\%s", kClsidStr);
     RegDeleteTreeW(HKEY_LOCAL_MACHINE, sub);
     return S_OK;
 }

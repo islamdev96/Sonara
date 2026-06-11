@@ -1,220 +1,79 @@
 #requires -RunAsAdministrator
-# diagnose-engine.ps1 - Diagnostic script to verify the health and status of Sonara Audio Engine.
+# diagnose-engine.ps1 — Sonara: prove whether the APO is actually loaded & processing
+$ErrorActionPreference = 'SilentlyContinue'
 
-$ErrorActionPreference = 'Continue'
-$ClsidSfx = '{538B6BB6-27D6-4D50-A09D-6E1883A66888}'
-$PKEY_SFX = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5'
-$PKEY_MFX = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6'
+$LogFile = "c:\Users\Islam Glab\Desktop\New folder\Sonara\WinAudioBoosterPro\diagnose_result.txt"
+Start-Transcript -Path $LogFile -Force
 
-Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host "        Sonara Engine Diagnostic Tool             " -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host ""
+$Clsid   = '{538B6BB6-27D6-4D50-A09D-6E1883A66888}'
+$PkeySfx = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5'
+$PkeyMfx = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6'
+$Dll     = Join-Path $env:WINDIR 'System32\BoosterAPO.dll'
+$DataDir = Join-Path $env:ProgramData 'WinAudioBoosterPro'
 
-$AllOk = $true
+function Pass($t){ Write-Host "[PASS] $t" -ForegroundColor Green }
+function Fail($t){ Write-Host "[FAIL] $t" -ForegroundColor Red }
+function Warn($t){ Write-Host "[WARN] $t" -ForegroundColor Yellow }
 
-# 1. Check if the DLL exists in System32
-Write-Host "1. Checking BoosterAPO.dll in System32..." -NoNewline
-$System32Dll = Join-Path $env:WINDIR "System32\BoosterAPO.dll"
-if (Test-Path $System32Dll) {
-    Write-Host " [OK]" -ForegroundColor Green
-    $fileInfo = Get-Item $System32Dll
-    Write-Host "   Size: $($fileInfo.Length) bytes" -ForegroundColor Gray
-    Write-Host "   Last Modified: $($fileInfo.LastWriteTime)" -ForegroundColor Gray
-    
-    # Check signature/digital signing (notice)
-    $sig = Get-AuthenticodeSignature $System32Dll -ErrorAction SilentlyContinue
-    if ($sig -and $sig.Status -eq 'Valid') {
-        Write-Host "   Digital Signature: VALID ($($sig.SignerCertificate.Subject))" -ForegroundColor Green
-    } else {
-        Write-Host "   Digital Signature: Not signed or invalid signature." -ForegroundColor Yellow
-        Write-Host "   (Note: Unsigned APOs might be blocked by audiodg.exe depending on system settings. EV certificate recommended.)" -ForegroundColor Gray
-    }
-} else {
-    Write-Host " [FAILED]" -ForegroundColor Red
-    Write-Host "   BoosterAPO.dll was NOT found in System32." -ForegroundColor Red
-    $AllOk = $false
-}
-Write-Host ""
+Write-Host "=== Sonara engine diagnostics ===" -ForegroundColor Cyan
 
-# 2. Check COM registration in HKCR
-Write-Host "2. Checking COM Server Registration..." -NoNewline
-$comPath = "HKCR:\CLSID\$ClsidSfx"
-if (Test-Path $comPath) {
-    Write-Host " [OK]" -ForegroundColor Green
-    $inproc = Join-Path $comPath "InprocServer32"
-    if (Test-Path $inproc) {
-        $dllRegistered = (Get-ItemProperty -Path $inproc -Name "(default)" -ErrorAction SilentlyContinue)."(default)"
-        $threading = (Get-ItemProperty -Path $inproc -Name "ThreadingModel" -ErrorAction SilentlyContinue).ThreadingModel
-        Write-Host "   InprocServer32 Path: $dllRegistered" -ForegroundColor Gray
-        Write-Host "   Threading Model: $threading" -ForegroundColor Gray
-    } else {
-        Write-Host "   Warning: InprocServer32 subkey missing!" -ForegroundColor Yellow
-        $AllOk = $false
-    }
-} else {
-    Write-Host " [FAILED]" -ForegroundColor Red
-    Write-Host "   COM registration key $ClsidSfx not found under HKCR:\CLSID." -ForegroundColor Red
-    $AllOk = $false
-}
-Write-Host ""
+# 1) DLL present in System32
+if (Test-Path $Dll) { Pass "DLL present: $Dll" } else { Fail "DLL missing in System32. Run install first." }
 
-# 3. Check APO registration in MMDevices
-Write-Host "3. Checking Audio Processing Object (APO) Registry Keys..." -NoNewline
-$apoRegPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\AudioProcessingObjects\$ClsidSfx"
-if (Test-Path $apoRegPath) {
-    Write-Host " [OK]" -ForegroundColor Green
-    $friendlyName = (Get-ItemProperty -Path $apoRegPath -Name "FriendlyName" -ErrorAction SilentlyContinue).FriendlyName
-    $flags = (Get-ItemProperty -Path $apoRegPath -Name "Flags" -ErrorAction SilentlyContinue).Flags
-    Write-Host "   APO Name: $friendlyName" -ForegroundColor Gray
-    Write-Host "   APO Flags: $flags" -ForegroundColor Gray
-} else {
-    Write-Host " [FAILED]" -ForegroundColor Red
-    Write-Host "   APO key not found under MMDevices\AudioProcessingObjects." -ForegroundColor Red
-    $AllOk = $false
-}
-Write-Host ""
+# 2) COM registration
+$inproc = "Registry::HKEY_CLASSES_ROOT\CLSID\$Clsid\InprocServer32"
+if (Test-Path $inproc) { Pass "COM InprocServer32 -> $((Get-ItemProperty $inproc).'(default)')" }
+else { Fail "COM server NOT registered (regsvr32 failed?)." }
 
-# 4. Check endpoint attachments and Enhancements state
-Write-Host "4. Checking Audio Render Endpoints Attachment..."
-$baseRenderPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
-$endpoints = Get-ChildItem $baseRenderPath -ErrorAction SilentlyContinue
-$attachedCount = 0
+# 3) APO registration
+$apo = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\AudioEngine\AudioProcessingObjects\$Clsid"
+if (Test-Path $apo) { Pass "APO registered under AudioEngine\AudioProcessingObjects." } else { Fail "APO NOT registered." }
 
-if ($endpoints) {
-    foreach ($ep in $endpoints) {
-        $epId = $ep.PSChildName
-        $fxPropertiesPath = Join-Path $ep.PSPath "FxProperties"
-        $propertiesPath = Join-Path $ep.PSPath "Properties"
-        
-        $devName = "Unknown Device"
-        if (Test-Path $propertiesPath) {
-            # Friendly name key is usually '{b3f833b1-30ca-4753-912f-d055b137c014},2'
-            $friendlyNameProp = Get-ItemProperty -Path $propertiesPath -ErrorAction SilentlyContinue | 
-                Get-Member -MemberType NoteProperty | 
-                Where-Object { $_.Name -like "*{b3f833b1-30ca-4753-912f-d055b137c014},2*" } | 
-                Select-Object -ExpandProperty Name
-            if ($friendlyNameProp) {
-                $devName = (Get-ItemProperty -Path $propertiesPath -Name $friendlyNameProp -ErrorAction SilentlyContinue).$friendlyNameProp
-            }
+# 4) Endpoint attachment + DATA-TYPE check (the suspected bug) + format gate
+$base = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
+Get-ChildItem $base | ForEach-Object {
+    if ((Get-ItemProperty $_.PSPath -Name DeviceState).DeviceState -ne 1) { return } # active only
+    $devId = $_.PSChildName
+    $name  = (Get-ItemProperty (Join-Path $_.PSPath 'Properties') -Name '{a45c254e-df1c-4efd-8020-67d146a850e0},2').'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+    Write-Host "`n-- Active device: $name [$devId]"
+    $fx = Join-Path $_.PSPath 'FxProperties'
+    if (Test-Path $fx) {
+        $k = Get-Item $fx
+        foreach ($pk in @($PkeySfx,$PkeyMfx)) {
+            if ($null -ne $k.GetValue($pk)) {
+                $kind = $k.GetValueKind($pk); $val = $k.GetValue($pk)
+                if ("$kind" -eq 'MultiString') { Pass "  $pk OK (REG_MULTI_SZ) -> $($val -join ', ')" }
+                else { Fail "  $pk WRONG TYPE = $kind (must be REG_MULTI_SZ). This alone prevents loading. Value: $val" }
+            } else { Warn "  $pk not set on this device." }
         }
-        
-        $devState = (Get-ItemProperty -Path $ep.PSPath -Name DeviceState -ErrorAction SilentlyContinue).DeviceState
-        
-        if ($devState -eq 1) {
-            Write-Host "   Active Device: $devName ($epId)" -ForegroundColor Gray
-            if (Test-Path $fxPropertiesPath) {
-                $sfx = (Get-ItemProperty -Path $fxPropertiesPath -Name $PKEY_SFX -ErrorAction SilentlyContinue).$PKEY_SFX
-                $mfx = (Get-ItemProperty -Path $fxPropertiesPath -Name $PKEY_MFX -ErrorAction SilentlyContinue).$PKEY_MFX
-                
-                # Check for disable enhancements key
-                # PKEY_AudioEndpoint_Disable_SysFx = '{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5'
-                $disableSysFxProp = Get-ItemProperty -Path $fxPropertiesPath -ErrorAction SilentlyContinue | 
-                    Get-Member -MemberType NoteProperty | 
-                    Where-Object { $_.Name -like "*{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5*" } | 
-                    Select-Object -ExpandProperty Name
-                $disabled = $false
-                if ($disableSysFxProp) {
-                    $disabledVal = (Get-ItemProperty -Path $fxPropertiesPath -Name $disableSysFxProp -ErrorAction SilentlyContinue).$disableSysFxProp
-                    if ($disabledVal -eq 1) {
-                        $disabled = $true
-                    }
-                }
-                
-                if ($sfx -eq $ClsidSfx -or $mfx -eq $ClsidSfx) {
-                    $attachedCount++
-                    Write-Host "     -> Status: ATTACHED" -ForegroundColor Green
-                    if ($disabled) {
-                        Write-Host "     -> WARNING: 'Disable all enhancements' is CHECKED in Windows properties for this device!" -ForegroundColor Yellow
-                        Write-Host "        The APO will not load or process audio for this device unless enhancements are enabled." -ForegroundColor Yellow
-                    } else {
-                        Write-Host "     -> Audio Enhancements: ENABLED" -ForegroundColor Green
-                    }
-                } else {
-                    Write-Host "     -> Status: Not Attached" -ForegroundColor Gray
-                }
-            } else {
-                Write-Host "     -> Status: No FxProperties subkey found." -ForegroundColor Gray
-            }
+        $fmt = (Get-ItemProperty (Join-Path $_.PSPath 'Properties') -Name '{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0').'{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0'
+        if ($fmt) {
+            $tag = [BitConverter]::ToUInt16($fmt,0)
+            if ($tag -eq 0xFFFE -and $fmt.Length -ge 40) {
+                $sub = [Guid]::new([byte[]]($fmt[24..39]))
+                if ($sub -eq [Guid]'00000003-0000-0010-8000-00aa00389b71') { Pass "  Device format = IEEE Float (accepted)." }
+                else { Fail "  Device format NOT IEEE Float ($sub). APO rejects it in IsInputFormatSupported -> never loads." }
+            } elseif ($tag -eq 3) { Pass "  Device format = IEEE Float." }
+            else { Fail "  Device format tag=$tag NOT IEEE Float -> APO rejects format." }
         }
-    }
-} else {
-    Write-Host "   No audio render devices found in registry." -ForegroundColor Red
-    $AllOk = $false
+    } else { Warn "  No FxProperties (driver exposes no effect slots)." }
 }
-Write-Host ""
 
-# 5. Check if audiodg.exe has the DLL loaded
-Write-Host "5. Checking if audiodg.exe has loaded BoosterAPO.dll..." -NoNewline
-$audiodgProcesses = Get-Process -Name "audiodg" -ErrorAction SilentlyContinue
-if ($audiodgProcesses) {
-    $dllLoaded = $false
-    foreach ($proc in $audiodgProcesses) {
-        $modules = $proc.Modules | Where-Object { $_.ModuleName -eq "BoosterAPO.dll" }
-        if ($modules) {
-            $dllLoaded = $true
-            break
-        }
-    }
-    
-    if ($dllLoaded) {
-        Write-Host " [OK]" -ForegroundColor Green
-        Write-Host "   audiodg.exe (PID: $($audiodgProcesses[0].Id)) has active module BoosterAPO.dll." -ForegroundColor Green
-    } else {
-        Write-Host " [WARNING/NOT LOADED]" -ForegroundColor Yellow
-        Write-Host "   audiodg.exe is running, but BoosterAPO.dll is NOT loaded into it." -ForegroundColor Yellow
-        Write-Host "   This could mean: " -ForegroundColor Gray
-        Write-Host "     a) No audio is currently playing." -ForegroundColor Gray
-        Write-Host "     b) The default render device Enhancements are disabled." -ForegroundColor Gray
-        Write-Host "     c) The Windows Audio service needs to be restarted." -ForegroundColor Gray
-        Write-Host "     d) Windows rejected the DLL signature (check Event Viewer -> Application)." -ForegroundColor Gray
-    }
-} else {
-    Write-Host " [FAILED]" -ForegroundColor Red
-    Write-Host "   audiodg.exe process is not running. (Windows Audio Service stopped or idle?)" -ForegroundColor Red
-    $AllOk = $false
-}
-Write-Host ""
+# 5) DEFINITIVE #1 — is the DLL inside audiodg.exe?
+Write-Host "`n-- audiodg.exe module check --"
+$tl = tasklist /m BoosterAPO.dll 2>$null | Out-String
+if ($tl -match 'audiodg') { Pass "BoosterAPO.dll IS loaded in audiodg.exe." }
+else { Fail "BoosterAPO.dll NOT found in audiodg.exe (note: audiodg is protected, may be a false negative -> rely on heartbeat below)." }
 
-# 6. Check shared memory/binary files and heartbeat
-Write-Host "6. Checking Shared Parameters and Status files..."
-$programDataPath = Join-Path $env:ProgramData "WinAudioBoosterPro"
-if (Test-Path $programDataPath) {
-    Write-Host "   Directory: $programDataPath [OK]" -ForegroundColor Green
-    
-    $paramsFile = Join-Path $programDataPath "params.bin"
-    if (Test-Path $paramsFile) {
-        $pInfo = Get-Item $paramsFile
-        Write-Host "   params.bin: FOUND (Size: $($pInfo.Length) bytes, Last Write: $($pInfo.LastWriteTime))" -ForegroundColor Green
-    } else {
-        Write-Host "   params.bin: NOT FOUND (Will be created when Electron UI starts)" -ForegroundColor Yellow
-    }
-    
-    $statusFile = Join-Path $programDataPath "status.bin"
-    if (Test-Path $statusFile) {
-        $sInfo = Get-Item $statusFile
-        $fileAge = (Get-Date) - $sInfo.LastWriteTime
-        Write-Host "   status.bin: FOUND (Size: $($sInfo.Length) bytes, Last Write: $($sInfo.LastWriteTime))" -ForegroundColor Green
-        
-        if ($fileAge.TotalSeconds -lt 5) {
-            Write-Host "   HEARTBEAT: ACTIVE (File modified $($fileAge.TotalSeconds.ToString("0.0"))s ago) [OK]" -ForegroundColor Green
-        } else {
-            Write-Host "   HEARTBEAT: STALE (File modified $($fileAge.TotalSeconds.ToString("0.0"))s ago)" -ForegroundColor Yellow
-            Write-Host "   (APO is not actively processing audio right now, or audio is paused.)" -ForegroundColor Gray
-        }
-    } else {
-        Write-Host "   status.bin: NOT FOUND (APO has not run or processed audio yet)" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "   Directory $programDataPath does not exist yet. Run the app or scripts first." -ForegroundColor Yellow
-}
-Write-Host ""
+# 6) DEFINITIVE #2 (ground truth) — status.bin heartbeat while audio plays
+Write-Host "`n-- status.bin heartbeat (only updates if APO code runs inside audiodg) --"
+$status = Join-Path $DataDir 'status.bin'
+if (Test-Path $status) {
+    $t1 = (Get-Item $status).LastWriteTime; Start-Sleep -Seconds 2; $t2 = (Get-Item $status).LastWriteTime
+    if ($t2 -gt $t1) { Pass "status.bin updating ($t1 -> $t2) => APO IS processing audio NOW." }
+    else { Fail "status.bin NOT updating => APO is not running (make sure audio is playing, then re-run)." }
+} else { Warn "status.bin not found in $DataDir => engine never wrote status." }
 
-Write-Host "==================================================" -ForegroundColor Cyan
-if ($AllOk) {
-    Write-Host "  DIAGNOSTIC SUMMARY: SYSTEM IS HEALTHY & CONFIGURED" -ForegroundColor Green
-} else {
-    Write-Host "  DIAGNOSTIC SUMMARY: PROBLEMS DETECTED" -ForegroundColor Red
-    Write-Host "  Please review the red and yellow items above." -ForegroundColor Red
-}
-Write-Host "==================================================" -ForegroundColor Cyan
+Write-Host "`n=== The truth is the heartbeat line (#6). If it is FAIL while audio plays, the APO is not in the path. ===" -ForegroundColor Cyan
+
+Stop-Transcript

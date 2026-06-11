@@ -1,0 +1,45 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260611161311
+Username: DESKTOP-35IK1QI\Islam Glab
+RunAs User: DESKTOP-35IK1QI\Islam Glab
+Configuration Name: 
+Machine: DESKTOP-35IK1QI (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command & { Set-Location 'c:\Users\Islam Glab\Desktop\New folder\Sonara\WinAudioBoosterPro'; .\engine\scripts\diagnose-engine.ps1 }
+Process ID: 16008
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is c:\Users\Islam Glab\Desktop\New folder\Sonara\WinAudioBoosterPro\diagnose_result.txt
+=== Sonara engine diagnostics ===
+[PASS] DLL present: C:\Windows\System32\BoosterAPO.dll
+[PASS] COM InprocServer32 -> C:\Windows\System32\BoosterAPO.dll
+[PASS] APO registered under AudioEngine\AudioProcessingObjects.
+
+-- Active device: Speakers/Headphones [{8cab9281-f2b9-4cb8-868e-120a83e96785}]
+[FAIL]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5 WRONG TYPE = String (must be REG_MULTI_SZ). This alone prevents loading. Value: {EACD2258-FCAC-4FF4-B36D-419E924A6D79}
+[FAIL]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6 WRONG TYPE = String (must be REG_MULTI_SZ). This alone prevents loading. Value: {A296D363-EE83-4af9-9BE7-729C1296150A}
+[FAIL]   Device format tag=65 NOT IEEE Float -> APO rejects format.
+
+-- Active device: FxSound Speakers [{d4c9db24-61f7-4c90-9afd-ad9c0d06f7fd}]
+[WARN]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5 not set on this device.
+[WARN]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6 not set on this device.
+[FAIL]   Device format tag=65 NOT IEEE Float -> APO rejects format.
+
+-- audiodg.exe module check --
+[FAIL] BoosterAPO.dll NOT found in audiodg.exe (note: audiodg is protected, may be a false negative -> rely on heartbeat below).
+
+-- status.bin heartbeat (only updates if APO code runs inside audiodg) --
+[WARN] status.bin not found in C:\ProgramData\WinAudioBoosterPro => engine never wrote status.
+
+=== The truth is the heartbeat line (#6). If it is FAIL while audio plays, the APO is not in the path. ===
+**********************
+Windows PowerShell transcript end
+End time: 20260611161311
+**********************

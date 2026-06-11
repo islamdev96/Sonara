@@ -25,6 +25,43 @@ $PKEY_SFX = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5'   # SFX (stream effects) 
 $PKEY_MFX = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6'   # MFX (mode effects) CLSID list
 $PKEY_COMPOSITE = '{D3993A3F-99C2-4402-B5EC-A92A0367664B},5' # composite FX
 
+function Set-MultiStringProperty {
+  param(
+    [string]$Path,
+    [string]$Name,
+    [string]$ValueToAdd
+  )
+  $regPath = $Path
+  if ($regPath -like "HKLM:\*") {
+    $regPath = $regPath.Substring(6)
+  }
+  
+  $list = @()
+  $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($regPath, $false)
+  if ($null -ne $key) {
+    $val = $key.GetValue($Name)
+    if ($null -ne $val) {
+      if ($val -is [array]) {
+        $list = $val
+      } elseif ($val -is [string]) {
+        $list = $val.Split(@("`r`n", "`n", ",", ";"), [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.Trim() }
+      }
+    }
+    $key.Close()
+  }
+  
+  $list = $list | Where-Object { $_ -ne $ValueToAdd }
+  $list += $ValueToAdd
+  
+  $rights = [System.Security.AccessControl.RegistryRights]::SetValue -bor [System.Security.AccessControl.RegistryRights]::QueryValues -bor [System.Security.AccessControl.RegistryRights]::ReadKey
+  $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($regPath, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree, $rights)
+  if ($null -eq $key) {
+    throw "Failed to open registry key $regPath with SetValue rights."
+  }
+  $key.SetValue($Name, [string[]]$list, [Microsoft.Win32.RegistryValueKind]::MultiString)
+  $key.Close()
+}
+
 Write-Host '== Sonara :: engine install ==' -ForegroundColor Cyan
 
 if (!(Test-Path $DllPath)) { throw "BoosterAPO.dll not found at $DllPath" }
@@ -67,9 +104,9 @@ if ($devices.Count -eq 0) {
     $fx = Join-Path $base "$devId\FxProperties"
     if (!(Test-Path $fx)) { New-Item -Path $fx -Force | Out-Null }
     
-    New-ItemProperty -Path $fx -Name $PKEY_SFX -PropertyType String -Value $ClsidSfx -Force | Out-Null
-    New-ItemProperty -Path $fx -Name $PKEY_MFX -PropertyType String -Value $ClsidSfx -Force | Out-Null
-    Write-Host "Attached engine to endpoint $devId"
+    Set-MultiStringProperty -Path $fx -Name $PKEY_SFX -ValueToAdd $ClsidSfx
+    Set-MultiStringProperty -Path $fx -Name $PKEY_MFX -ValueToAdd $ClsidSfx
+    Write-Host "Attached engine to endpoint $devId (as REG_MULTI_SZ)"
   }
 }
 
