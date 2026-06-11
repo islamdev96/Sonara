@@ -1,9 +1,12 @@
-#requires -RunAsAdministrator
 # diagnose-engine.ps1 — Sonara: prove whether the APO is actually loaded & processing
 $ErrorActionPreference = 'SilentlyContinue'
 
 $LogFile = "c:\Users\Islam Glab\Desktop\New folder\Sonara\WinAudioBoosterPro\diagnose_result.txt"
 Start-Transcript -Path $LogFile -Force
+
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "[WARN] Not running as Administrator. Registry endpoint details might be incomplete." -ForegroundColor Yellow
+}
 
 $Clsid   = '{538B6BB6-27D6-4D50-A09D-6E1883A66888}'
 $PkeySfx = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5'

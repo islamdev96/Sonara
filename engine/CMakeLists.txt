@@ -61,3 +61,15 @@ if(WIN32 AND MSVC)
         $<$<BOOL:${WDK_APO_LIB}>:${WDK_APO_LIB}>
         $<$<BOOL:${WDK_MEDIA_TYPE_LIB}>:${WDK_MEDIA_TYPE_LIB}>)
 endif()
+
+# =============================================================================
+# Option 3: User-mode Virtual Audio Device Host
+# =============================================================================
+add_executable(SonaraHost
+    src/host/main.cpp
+)
+target_include_directories(SonaraHost PRIVATE src)
+target_link_libraries(SonaraHost PRIVATE
+    ole32 oleaut32 uuid propsys Winmm
+)
+

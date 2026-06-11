@@ -45,12 +45,10 @@ function readStatus() {
     const status = parseStatus(buf);
     if (!status) return null;
 
-    // Check freshness: is the heartbeat recent?
-    const now = Date.now(); // JS timestamp (ms since epoch)
-    // GetTickCount64 is ms since boot — we can't compare directly to Date.now().
-    // Instead, we read the file's mtime as a proxy for freshness.
-    const stat = fs.statSync(STATUS_FILE);
-    const fileAgeMs = now - stat.mtimeMs;
+    // Check freshness: compare status.heartbeatMs (ticks since boot)
+    // with current system uptime in ms.
+    const uptimeMs = os.uptime() * 1000;
+    const fileAgeMs = Math.abs(uptimeMs - status.heartbeatMs);
     const isAlive = fileAgeMs < HEARTBEAT_TIMEOUT_MS;
 
     return { ...status, isAlive, fileAgeMs };

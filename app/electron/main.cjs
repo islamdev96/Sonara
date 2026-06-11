@@ -16,13 +16,57 @@ const licensing = require('./licensing.cjs');
 // Paths & state
 // =============================================================================
 const RES = process.resourcesPath || __dirname;
+const HOST_EXE = app.isPackaged ? path.join(RES, 'engine', 'SonaraHost.exe')
+                                : path.join(__dirname, '..', '..', 'build', 'Release', 'SonaraHost.exe');
 const ENGINE_DLL = app.isPackaged ? path.join(RES, 'engine', 'BoosterAPO.dll')
                                   : path.join(__dirname, '..', '..', 'build', 'Release', 'BoosterAPO.dll');
 const INSTALL_PS1 = app.isPackaged ? path.join(RES, 'engine', 'install-engine.ps1')
                                    : path.join(__dirname, '..', '..', 'engine', 'scripts', 'install-engine.ps1');
 const UNINSTALL_PS1 = app.isPackaged ? path.join(RES, 'engine', 'uninstall-engine.ps1')
                                      : path.join(__dirname, '..', '..', 'engine', 'scripts', 'uninstall-engine.ps1');
-const ENGINE_SYS32 = path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 'BoosterAPO.dll');
+
+let hostProcess = null;
+
+function startHost() {
+  if (hostProcess) return;
+  try {
+    const output = execFileSync('tasklist.exe', ['/nh', '/fi', 'imagename eq SonaraHost.exe'], { encoding: 'utf8', windowsHide: true });
+    if (output.toLowerCase().includes('sonarahost.exe')) {
+      console.log("[Host] SonaraHost.exe is already running.");
+      return;
+    }
+  } catch (e) {}
+
+  console.log("[Host] Starting SonaraHost.exe...");
+  try {
+    const { spawn } = require('child_process');
+    hostProcess = spawn(HOST_EXE, [], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    hostProcess.unref();
+    console.log("[Host] SonaraHost.exe spawned.");
+  } catch (e) {
+    console.error("[Host] Failed to spawn SonaraHost.exe:", e);
+  }
+}
+
+function stopHost() {
+  if (hostProcess) {
+    try {
+      process.kill(-hostProcess.pid);
+    } catch (e) {
+      try {
+        hostProcess.kill();
+      } catch (err) {}
+    }
+    hostProcess = null;
+  }
+  try {
+    execFileSync('taskkill.exe', ['/f', '/im', 'SonaraHost.exe'], { stdio: 'ignore', windowsHide: true });
+  } catch (e) {}
+}
 
 let mainWindow = null;
 let tray = null;
@@ -43,18 +87,15 @@ const state = {
 // Engine lifecycle (no third-party software involved)
 // =============================================================================
 function checkEngineInstalled() {
-  engineInstalled = fs.existsSync(ENGINE_SYS32);
+  engineInstalled = fs.existsSync(HOST_EXE);
   if (engineInstalled) {
-    // Primary detection: read the heartbeat from status.bin (proof of actual processing).
     const status = statusBridge.readStatus();
     if (status && status.isAlive) {
       engineActive = true;
     } else {
-      // Fallback: check if audiodg has the DLL loaded (covers the case where
-      // the APO is loaded but hasn't processed any audio yet).
       try {
-        const output = execFileSync('tasklist.exe', ['/m', 'BoosterAPO.dll'], { encoding: 'utf8', windowsHide: true });
-        engineActive = output.toLowerCase().includes('audiodg.exe');
+        const output = execFileSync('tasklist.exe', ['/nh', '/fi', 'imagename eq SonaraHost.exe'], { encoding: 'utf8', windowsHide: true });
+        engineActive = output.toLowerCase().includes('sonarahost.exe');
       } catch (e) {
         engineActive = false;
       }
@@ -147,6 +188,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
   app.on('second-instance', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
   app.whenReady().then(() => {
+    startHost();
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
     checkEngineInstalled();
     publish();
@@ -187,7 +229,10 @@ else {
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); else mainWindow.show(); });
   });
 }
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  stopHost();
+  globalShortcut.unregisterAll();
+});
 
 // =============================================================================
 // IPC

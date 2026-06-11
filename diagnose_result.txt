@@ -1,12 +1,12 @@
 ﻿**********************
 Windows PowerShell transcript start
-Start time: 20260611161311
+Start time: 20260611192348
 Username: DESKTOP-35IK1QI\Islam Glab
 RunAs User: DESKTOP-35IK1QI\Islam Glab
 Configuration Name: 
 Machine: DESKTOP-35IK1QI (Microsoft Windows NT 10.0.19045.0)
-Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command & { Set-Location 'c:\Users\Islam Glab\Desktop\New folder\Sonara\WinAudioBoosterPro'; .\engine\scripts\diagnose-engine.ps1 }
-Process ID: 16008
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File .\engine\scripts\diagnose-engine.ps1
+Process ID: 13424
 PSVersion: 5.1.19041.6456
 PSEdition: Desktop
 PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
@@ -17,6 +17,7 @@ PSRemotingProtocolVersion: 2.3
 SerializationVersion: 1.1.0.1
 **********************
 Transcript started, output file is c:\Users\Islam Glab\Desktop\New folder\Sonara\WinAudioBoosterPro\diagnose_result.txt
+[WARN] Not running as Administrator. Registry endpoint details might be incomplete.
 === Sonara engine diagnostics ===
 [PASS] DLL present: C:\Windows\System32\BoosterAPO.dll
 [PASS] COM InprocServer32 -> C:\Windows\System32\BoosterAPO.dll
@@ -41,5 +42,5 @@ Transcript started, output file is c:\Users\Islam Glab\Desktop\New folder\Sonara
 === The truth is the heartbeat line (#6). If it is FAIL while audio plays, the APO is not in the path. ===
 **********************
 Windows PowerShell transcript end
-End time: 20260611161311
+End time: 20260611192349
 **********************
