@@ -71,6 +71,46 @@ function stopHost() {
     // Force kill fallback
     execFileSync('taskkill.exe', ['/f', '/im', 'SonaraHost.exe'], { stdio: 'ignore', windowsHide: true });
   } catch (e) {}
+
+  // Restore the original audio device from Electron fallback!
+  const ORIG_DEV_FILE = path.join(process.env.ProgramData || 'C:\\ProgramData', 'WinAudioBoosterPro', 'origdev.txt');
+  if (fs.existsSync(ORIG_DEV_FILE)) {
+    try {
+      const origId = fs.readFileSync(ORIG_DEV_FILE, 'utf8').trim();
+      if (origId) {
+        console.log(`[Host] Restoring original default audio device to: ${origId}`);
+        const psScript = `
+          $c = @"
+          using System;
+          using System.Runtime.InteropServices;
+          public enum ERole : uint { eConsole = 0, eMultimedia = 1, eCommunications = 2 }
+          [Guid("870AF99C-171D-4F9E-AF0D-E63DF40C2BC9"), ComImport]
+          internal class CPolicyConfigClient { }
+          [Guid("F8679F50-850A-41CF-9C72-430F290290C8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+          internal interface IPolicyConfig {
+              void GetMixFormat(); void GetDeviceFormat(); void ResetDefaultDRVM(); void GetProcessingPeriod(); void SetProcessingPeriod();
+              void GetShareMode(); void SetShareMode(); void GetPropertyValue(); void SetPropertyValue();
+              void SetDefaultEndpoint(string wszDeviceId, ERole role); void SetEndpointVisibility();
+          }
+          public class Switcher {
+              public static void SetDefault(string id) {
+                  IPolicyConfig c = (IPolicyConfig)new CPolicyConfigClient();
+                  c.SetDefaultEndpoint(id, ERole.eConsole);
+                  c.SetDefaultEndpoint(id, ERole.eMultimedia);
+                  c.SetDefaultEndpoint(id, ERole.eCommunications);
+              }
+          }
+          "@
+          Add-Type -TypeDefinition $c -ErrorAction SilentlyContinue
+          [Switcher]::SetDefault('${origId}')
+        `;
+        execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psScript], { stdio: 'ignore', windowsHide: true });
+      }
+      fs.unlinkSync(ORIG_DEV_FILE);
+    } catch (err) {
+      console.error("[Host] Failed to restore default audio device on exit:", err);
+    }
+  }
 }
 
 let mainWindow = null;

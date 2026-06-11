@@ -129,6 +129,20 @@ int main(int argc, char* argv[]) {
         pDefaultDevice->GetId(&g_pwszOriginalDefaultId);
         SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
+        // Write original device ID to file for Electron restore fallback
+        wchar_t originalDeviceFilePath[MAX_PATH];
+        if (wab::SharedStatus::resolvePath(originalDeviceFilePath, MAX_PATH)) {
+            wchar_t* pBin = wcsstr(originalDeviceFilePath, L"status.bin");
+            if (pBin) {
+                wcscpy_s(pBin, 12, L"origdev.txt");
+                FILE* f = nullptr;
+                if (_wfopen_s(&f, originalDeviceFilePath, L"w, ccs=UTF-8") == 0 && f) {
+                    fwprintf(f, L"%s", g_pwszOriginalDefaultId);
+                    fclose(f);
+                }
+            }
+        }
+
         IPropertyStore* pProps = nullptr;
         pDefaultDevice->OpenPropertyStore(STGM_READ, &pProps);
         if (pProps) {
