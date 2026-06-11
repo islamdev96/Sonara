@@ -193,6 +193,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 980, height: 660, minWidth: 760, minHeight: 540,
     backgroundColor: '#0b0c10',
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false, contextIsolation: true,
@@ -216,8 +217,8 @@ function pushStatus() {
 }
 
 function createTray() {
-  const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAhElEQVR4nGNgGNSAkYGBgcHYxIzh3LmzDCwEFDMwMDAwHD5ykuHevXsMp06dZDA2MSOsBswGBgYGhtOnTzOcPXuW4dq1a4TdQKwBDAwMDHfv3iWshqABly5dIl0NIyMjw717d/G7gFAYEOUCQmFAlAsIhQE+F+ANA3zhTVIYUC0n0R0AAEIIOGpxUvjYAAAAAElFTkSuQmCC');
-  tray = new Tray(icon);
+  const iconPath = path.join(__dirname, 'icon.png');
+  tray = new Tray(iconPath);
   tray.setToolTip('Sonara');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open', click: () => mainWindow.show() },
