@@ -1,0 +1,5 @@
+C:/Users/Islam Glab/Desktop/New folder/Sonara/WinAudioBoosterPro/engine/build/CMakeFiles/dsp_test.dir
+C:/Users/Islam Glab/Desktop/New folder/Sonara/WinAudioBoosterPro/engine/build/CMakeFiles/BoosterAPO.dir
+C:/Users/Islam Glab/Desktop/New folder/Sonara/WinAudioBoosterPro/engine/build/CMakeFiles/RUN_TESTS.dir
+C:/Users/Islam Glab/Desktop/New folder/Sonara/WinAudioBoosterPro/engine/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/Islam Glab/Desktop/New folder/Sonara/WinAudioBoosterPro/engine/build/CMakeFiles/ZERO_CHECK.dir

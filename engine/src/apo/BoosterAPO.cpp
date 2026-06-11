@@ -3,6 +3,7 @@
 #include "BoosterAPO.h"
 #include <new>
 #include <cstring>
+#include <cmath>
 
 extern LONG g_cDllRef;
 // Registration properties advertised to the audio engine.
@@ -20,9 +21,11 @@ CBoosterAPO::CBoosterAPO() : CBaseAudioProcessingObject(g_RegProps) {
     // Open the shared parameter section. If it does not exist yet the engine
     // simply runs at unity until the UI publishes settings.
     m_params.open();
+    m_status.open();
 }
 
 CBoosterAPO::~CBoosterAPO() {
+    m_status.close();
     m_params.close();
     InterlockedDecrement(&g_cDllRef);
 }
@@ -113,6 +116,7 @@ STDMETHODIMP CBoosterAPO::LockForProcess(UINT32 cInput, APO_CONNECTION_DESCRIPTO
 
     m_engine.prepare(m_sampleRate, (int)m_channels);
     m_params.open(); // Retry opening the file if it wasn't available at startup
+    m_status.open(); // Also retry the status file
     wab::dsp::Parameters p;
     if (m_params.read(p)) m_engine.updateParameters(p);
     m_locked = true;
@@ -155,6 +159,42 @@ STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPER
         }
         if (pIn != pOut) std::memcpy(pOut, pIn, sizeof(float) * frames * m_channels);
         m_engine.process(pOut, (int)frames);
+
+        // Accumulate RMS/peak for the status writer.
+        {
+            float sumL = 0.0f, sumR = 0.0f, pkL = 0.0f, pkR = 0.0f;
+            const UINT32 ch = m_channels;
+            for (UINT32 n = 0; n < frames; ++n) {
+                const float* f = pOut + static_cast<size_t>(n) * ch;
+                const float absL = std::fabs(f[0]);
+                sumL += f[0] * f[0];
+                if (absL > pkL) pkL = absL;
+                if (ch >= 2) {
+                    const float absR = std::fabs(f[1]);
+                    sumR += f[1] * f[1];
+                    if (absR > pkR) pkR = absR;
+                } else {
+                    sumR = sumL; pkR = pkL;
+                }
+            }
+            const float invN = (frames > 0) ? 1.0f / frames : 0.0f;
+            m_rmsAccL += sumL * invN;
+            m_rmsAccR += sumR * invN;
+            if (pkL > m_peakL) m_peakL = pkL;
+            if (pkR > m_peakR) m_peakR = pkR;
+        }
+
+        // Write status (heartbeat + levels) every 10 callbacks (~100 ms).
+        if (++m_statusCounter >= 10) {
+            const float rmsL = std::sqrt(m_rmsAccL / m_statusCounter);
+            const float rmsR = std::sqrt(m_rmsAccR / m_statusCounter);
+            m_status.write(rmsL, rmsR, m_peakL, m_peakR,
+                           static_cast<uint32_t>(m_sampleRate), m_channels);
+            m_rmsAccL = m_rmsAccR = 0.0f;
+            m_peakL = m_peakR = 0.0f;
+            m_statusCounter = 0;
+        }
+
         out->u32ValidFrameCount = frames;
         out->u32BufferFlags = in->u32BufferFlags;
         break;

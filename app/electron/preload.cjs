@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Events
   onEngineStatus: (cb) => ipcRenderer.on('engine-status', (_e, d) => cb(d)),
+  onEngineLevels: (cb) => ipcRenderer.on('engine-levels', (_e, d) => cb(d)),
   onLicenseStatus: (cb) => ipcRenderer.on('license-status', (_e, d) => cb(d)),
   onHotkey: (cb) => ipcRenderer.on('hotkey', (_e, d) => cb(d)),
 });

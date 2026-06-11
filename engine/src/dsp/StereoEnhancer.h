@@ -21,10 +21,20 @@ public:
     void setAmbience(float amb) noexcept { ambMix_ = std::clamp(amb,0.0f,1.0f) * 0.35f; }
 
     // Process one stereo frame in place.
+    // Includes mono-compatibility protection: if L≈R (common on laptop speakers),
+    // width is automatically reduced to prevent comb filtering when the signal
+    // is later collapsed to mono (e.g. Bluetooth, single-speaker playback).
     inline void processStereo(float& l, float& r) noexcept {
-        // Mid/Side widening.
+        // Mono-compatibility: measure how correlated the channels are.
+        // monoCorr ≈ 1.0 for identical L/R (pure mono), ≈ 0.0 for decorrelated.
+        const float sumAbs = std::fabs(l) + std::fabs(r) + 1e-9f;
+        const float monoCorr = std::fabs(l + r) / sumAbs;
+        // Reduce width when content is very mono (prevents destructive comb filter).
+        const float safeWidth = width_ * (0.4f + 0.6f * (1.0f - monoCorr * monoCorr));
+
+        // Mid/Side widening with mono-safe width.
         const float mid  = 0.5f * (l + r);
-        const float side = 0.5f * (l - r) * width_;
+        const float side = 0.5f * (l - r) * safeWidth;
         float outL = mid + side;
         float outR = mid - side;
 

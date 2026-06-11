@@ -45,7 +45,7 @@ static LONG setKeyStr(HKEY root, const wchar_t* sub, const wchar_t* name, const 
     return r;
 }
 
-static const wchar_t* kClsidStr = L"{A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C}";
+static const wchar_t* kClsidStr = L"{538B6BB6-27D6-4D50-A09D-6E1883A66888}";
 
 extern "C" HRESULT STDAPICALLTYPE DllRegisterServer() {
     wchar_t path[MAX_PATH];

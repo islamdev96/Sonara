@@ -18,7 +18,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ClsidSfx = '{A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C}'
+$ClsidSfx = '{538B6BB6-27D6-4D50-A09D-6E1883A66888}'
 
 # Property keys (PKEY) used by the Windows audio engine for software effects.
 $PKEY_SFX = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5'   # SFX (stream effects) CLSID list

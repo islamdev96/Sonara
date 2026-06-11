@@ -7,21 +7,28 @@ and lets the UI be a normal desktop app.
 ```mermaid
 flowchart LR
     subgraph App["app/ (Electron + React)"]
-        UI["Control panel\nEQ / boost / effects"]
+        UI["Control panel\nEQ / boost / VU Meter"]
         Bridge["paramBridge.cjs\n(writes params.bin)"]
+        StatusBridge["statusBridge.cjs\n(reads status.bin)"]
         UI --> Bridge
+        StatusBridge --> UI
     end
 
     Params[("params.bin\n%ProgramData%\\WinAudioBoosterPro")]
+    Status[("status.bin\n%ProgramData%\\WinAudioBoosterPro")]
     Bridge -- "memory-mapped write" --> Params
+    Status -- "file read" --> StatusBridge
 
     subgraph Engine["engine/ (native C++ APO)"]
         Shared["SharedParams\n(seqlock reader)"]
+        SharedStatus["SharedStatus\n(seqlock writer)"]
         Chain["DSP chain"]
         Shared --> Chain
+        Chain --> SharedStatus
     end
 
     Params -- "memory-mapped read" --> Shared
+    SharedStatus -- "memory-mapped write" --> Status
     Audio["Windows audio stream\n(audiodg.exe)"] --> Chain --> Out["Speakers / headphones"]
 ```
 
@@ -31,7 +38,7 @@ Header-only, portable C++20 with **no OS or Windows dependency**, so it compiles
 and is unit-tested on Linux CI. Signal flow inside `BoostEngine`:
 
 ```
-input → preamp → 10-band EQ → bass → clarity → compressor → stereo widen → output gain → limiter → output
+input → preamp → 10-band EQ → bass → clarity → [soft pre-clip] → compressor → stereo widen (w/ mono compatibility) → output gain → limiter → output
 ```
 
 | File | Responsibility |
@@ -40,8 +47,8 @@ input → preamp → 10-band EQ → bass → clarity → compressor → stereo w
 | `Parameters.h` | Plain parameter struct + units shared with the UI. |
 | `Compressor.h` | Soft-knee dynamics for loudness/"dynamic". |
 | `Limiter.h` | Look-ahead brick-wall limiter (prevents clipping on big boosts). |
-| `StereoEnhancer.h` | Mid/side width + ambience. |
-| `BoostEngine.h` | Orchestrates the full chain; the only header the host includes. |
+| `StereoEnhancer.h` | Mid/side width + ambience (with automatic mono-compatibility correlation protection). |
+| `BoostEngine.h` | Orchestrates the full chain (including tanh soft pre-clipper for gain staging protection). |
 
 Because it is pure and allocation-free on the audio path, the same core can be
 reused later for a microphone engine or a macOS port.
@@ -53,35 +60,38 @@ effect into the system audio graph.
 
 | File | Responsibility |
 |------|----------------|
-| `BoosterAPO.{h,cpp}` | `IAudioProcessingObject` implementation; calls `BoostEngine` per buffer. |
+| `BoosterAPO.{h,cpp}` | `IAudioProcessingObject` implementation; calls `BoostEngine` per buffer and writes live status (heartbeat/levels) to `status.bin`. |
 | `ClassFactory.{h,cpp}` | COM class factory for the APO CLSID. |
-| `SharedParams.h` | Maps `params.bin` and reads parameters with a seqlock (lock-free, audio-thread safe). |
+| `SharedParams.h` | Maps `params.bin` and reads parameters with a seqlock (RT-thread safe, pinned memory via `VirtualLock`, no page faults). |
+| `SharedStatus.h` | Maps `status.bin` and writes heartbeat + audio levels with a seqlock (RT-thread safe, pinned memory). |
+| `StatusBlock.h` | Defines the binary POD structure for the heartbeat/RMS status bridge. |
 | `../dllmain.cpp` | `DllGetClassObject` / `DllRegisterServer`: registers the COM server **and** the APO. |
 | `../BoosterAPO.def` | Exported COM entry points. |
 
-## 3. The parameter bridge
+## 3. The parameter and status bridges (Bi-directional IPC)
 
-The UI never talks to the audio thread directly. It writes a fixed-layout binary
-block to a memory-mapped file; the APO reads it every buffer.
+The UI never talks to the audio thread directly, ensuring a crash or hang in the UI cannot stall the system audio graph. Communication is completely bi-directional via memory-mapped files:
 
-- **File:** `C:\ProgramData\WinAudioBoosterPro\params.bin`
-- **Concurrency:** a sequence counter (seqlock) lets the reader detect torn
-  writes and skip them — no locks on the audio thread.
-- **Layout:** magic `WABP`, version, seq, then enabled flag, gains, the 10 EQ
-  band gains, the five enhancer amounts, and limiter settings. The exact byte
-  layout lives in `app/electron/paramBridge.cjs` (writer) and
-  `engine/src/apo/SharedParams.h` (reader) and must stay in sync.
+- **Parameter Bridge (UI → APO):**
+  - **File:** `C:\ProgramData\WinAudioBoosterPro\params.bin`
+  - **Concurrency:** A sequence counter (seqlock) lets the reader detect torn writes and skip them. It uses `YieldProcessor()` rather than `Sleep(0)` in its retry spinloop to be completely real-time safe.
+  - **Layout:** Magic `WABP`, version, sequence counter, enabled flag, preampDb, outputGainDb, the 10-band EQ gains, and the enhancer and limiter settings. Pinned via `VirtualLock` to avoid soft page faults on the RT audio thread.
+  - **Path:** `app/electron/paramBridge.cjs` (writer) and `engine/src/apo/SharedParams.h` (reader).
+
+- **Status Bridge (APO → UI):**
+  - **File:** `C:\ProgramData\WinAudioBoosterPro\status.bin`
+  - **Concurrency:** A seqlock-protected writer avoids torn writes. The APO writes processing stats every ~100ms.
+  - **Layout:** Magic `WABS`, sequence counter, heartbeat tick, RMS levels (L/R), Peak levels (L/R), sample rate, and channels. Pinned via `VirtualLock` to guarantee RT-thread safety.
+  - **Path:** `engine/src/apo/SharedStatus.h` / `StatusBlock.h` (writer) and `app/electron/statusBridge.cjs` (reader). Used to verify the APO is actually running and drive the live VU meter in the UI.
 
 ## 4. The desktop app (`app/`)
 
-- `electron/main.cjs` — window/tray lifecycle, global hotkeys, and one-time
-  engine install (runs the PowerShell scripts elevated). It contains **no**
-  Equalizer APO logic; it only drives our own engine.
+- `electron/main.cjs` — window/tray lifecycle, global hotkeys, status polling, and elevated engine management.
 - `electron/paramBridge.cjs` — serializes UI state into `params.bin`.
-- `electron/licensing.cjs` — offline Ed25519 license verification + trial; the
-  `LAUNCH_FREE` flag unlocks everything during the free launch phase.
-- `electron/preload.cjs` — safe IPC surface exposed to the renderer.
-- `src/` — React control panel (presets, EQ sliders, enhancers, i18n EN/AR).
+- `electron/statusBridge.cjs` — parses `status.bin` to check heartbeat freshness and expose RMS/peak levels.
+- `electron/licensing.cjs` — offline Ed25519 license verification + trial; the `LAUNCH_FREE` flag unlocks everything.
+- `electron/preload.cjs` — safe IPC surface exposed to the renderer (including audio levels events).
+- `src/` — React control panel (presets, EQ sliders, enhancers, VU meter, i18n EN/AR).
 
 ### Renderer structure (`app/src/`)
 

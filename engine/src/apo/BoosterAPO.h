@@ -14,13 +14,15 @@
 #include <audioengineextensionapo.h>
 #include "../dsp/BoostEngine.h"
 #include "SharedParams.h"
+#include "SharedStatus.h"
 
-// {A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C} - CLSID of the Booster APO.
+// {538B6BB6-27D6-4D50-A09D-6E1883A66888} - CLSID of the Booster APO.
+// Generated via [guid]::NewGuid() — do NOT reuse placeholder GUIDs in production.
 DEFINE_GUID(CLSID_BoosterAPO,
-    0xa1b2c3d4, 0xe5f6, 0x47a8, 0x9b, 0x0c, 0x1d, 0x2e, 0x3f, 0x4a, 0x5b, 0x6c);
+    0x538b6bb6, 0x27d6, 0x4d50, 0xa0, 0x9d, 0x6e, 0x18, 0x83, 0xa6, 0x68, 0x88);
 
 // Long-running identifier used in the registry APO registration.
-class __declspec(uuid("A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C")) CBoosterAPO;
+class __declspec(uuid("538B6BB6-27D6-4D50-A09D-6E1883A66888")) CBoosterAPO;
 
 constexpr LONG_PTR APOERR_DEFAULT = 0;
 
@@ -70,5 +72,10 @@ private:
 
     wab::dsp::BoostEngine m_engine;   // the self-contained DSP engine
     wab::SharedParams     m_params;   // live parameters from the UI
+    wab::SharedStatus     m_status;   // heartbeat + RMS back to the UI
     UINT64        m_frameCounter = 0;  // throttle param polling
+    // Accumulate RMS/peak over several callbacks, write status every ~10 calls.
+    float         m_rmsAccL = 0.0f, m_rmsAccR = 0.0f;
+    float         m_peakL = 0.0f, m_peakR = 0.0f;
+    UINT32        m_statusCounter = 0;
 };

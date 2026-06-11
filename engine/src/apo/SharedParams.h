@@ -37,17 +37,22 @@ public:
         view_ = reinterpret_cast<dsp::Parameters*>(
             MapViewOfFile(hMap_, FILE_MAP_READ, 0, 0, sizeof(dsp::Parameters)));
         if (!view_) { close(); return false; }
+        // Pin the page in physical memory so the RT thread never takes a
+        // soft page fault on first read (which would cause a glitch).
+        VirtualLock(view_, sizeof(dsp::Parameters));
         return true;
     }
 
     // RT-thread reader: seqlock double-read to avoid torn snapshots.
+    // IMPORTANT: No Sleep/blocking calls allowed here — this runs on the
+    // real-time audio thread inside audiodg.exe.
     bool read(dsp::Parameters& out) const {
         if (!view_) return false;
         for (int i = 0; i < 4; ++i) {
             const uint32_t s1 = view_->seq; MemoryBarrier();
             if (s1 == 0) {
-                // Write in progress by the UI. Yield and try again.
-                Sleep(0);
+                // Write in progress by the UI. Spin briefly and retry.
+                YieldProcessor();
                 continue;
             }
             out = *view_;                   MemoryBarrier();

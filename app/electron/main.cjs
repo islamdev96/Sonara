@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const { execFile, execFileSync } = require('child_process');
 const bridge = require('./paramBridge.cjs');
+const statusBridge = require('./statusBridge.cjs');
 const licensing = require('./licensing.cjs');
 
 // =============================================================================
@@ -44,11 +45,19 @@ const state = {
 function checkEngineInstalled() {
   engineInstalled = fs.existsSync(ENGINE_SYS32);
   if (engineInstalled) {
-    try {
-      const output = execFileSync('tasklist.exe', ['/m', 'BoosterAPO.dll'], { encoding: 'utf8', windowsHide: true });
-      engineActive = output.toLowerCase().includes('audiodg.exe');
-    } catch (e) {
-      engineActive = false;
+    // Primary detection: read the heartbeat from status.bin (proof of actual processing).
+    const status = statusBridge.readStatus();
+    if (status && status.isAlive) {
+      engineActive = true;
+    } else {
+      // Fallback: check if audiodg has the DLL loaded (covers the case where
+      // the APO is loaded but hasn't processed any audio yet).
+      try {
+        const output = execFileSync('tasklist.exe', ['/m', 'BoosterAPO.dll'], { encoding: 'utf8', windowsHide: true });
+        engineActive = output.toLowerCase().includes('audiodg.exe');
+      } catch (e) {
+        engineActive = false;
+      }
     }
   } else {
     engineActive = false;
@@ -74,8 +83,12 @@ function runElevatedPS(scriptPath, args = []) {
 // =============================================================================
 // boostPercent (UI 0..500) -> engine parameters
 // =============================================================================
+// boostPercent (UI 0..500) -> engine preampDb.
+// Design: this is a BOOST-ONLY control. Values below 100% clamp to 0 dB
+// (unity gain) so the slider can never attenuate system volume — the user
+// expects a "volume booster", not a volume fader.
 function boostPercentToPreampDb(percent) {
-  const ratio = Math.max(1.0, percent / 100.0); // أقل من 100% = 0 dB، ما يكتمش أبدًا
+  const ratio = Math.max(1.0, percent / 100.0);
   return 20.0 * Math.log10(ratio);
 }
 
@@ -150,6 +163,22 @@ else {
         pushStatus();
       }
     }, 3000);
+
+    // Fast polling: push audio levels to the renderer for the VU meter (~200ms).
+    setInterval(() => {
+      if (!mainWindow || !engineActive) return;
+      const status = statusBridge.readStatus();
+      if (status && status.isAlive) {
+        mainWindow.webContents.send('engine-levels', {
+          rmsLeft: status.rmsLeft,
+          rmsRight: status.rmsRight,
+          peakLeft: status.peakLeft,
+          peakRight: status.peakRight,
+          sampleRate: status.sampleRate,
+          channels: status.channels,
+        });
+      }
+    }, 200);
 
     globalShortcut.register('CommandOrControl+Alt+Up',   () => mainWindow.webContents.send('hotkey', 'up'));
     globalShortcut.register('CommandOrControl+Alt+Down', () => mainWindow.webContents.send('hotkey', 'down'));

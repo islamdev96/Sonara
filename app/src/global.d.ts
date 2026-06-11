@@ -17,6 +17,15 @@ export type LicenseStatus = {
   email?: string | null;
 };
 
+export type EngineLevels = {
+  rmsLeft: number;
+  rmsRight: number;
+  peakLeft: number;
+  peakRight: number;
+  sampleRate: number;
+  channels: number;
+};
+
 declare global {
   interface Window {
     api: {
@@ -29,6 +38,7 @@ declare global {
       openBuy: () => void;
       toggleAutostart: (enable: boolean) => void;
       onEngineStatus: (cb: (d: { installed: boolean; active: boolean }) => void) => void;
+      onEngineLevels: (cb: (d: EngineLevels) => void) => void;
       onLicenseStatus: (cb: (d: LicenseStatus) => void) => void;
       onHotkey: (cb: (d: 'up' | 'down') => void) => void;
     };
