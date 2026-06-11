@@ -166,13 +166,12 @@ function runElevatedPS(scriptPath, args = []) {
   });
 }
 
-// =============================================================================
 // boostPercent (UI 0..500) -> engine parameters
 // =============================================================================
-// boostPercent (UI 0..500) -> engine preampDb.
-// Design: this is a BOOST-ONLY control. Values below 100% clamp to 0 dB
-// (unity gain) so the slider can never attenuate system volume — the user
-// expects a "volume booster", not a volume fader.
+// boostPercent 0..500 -> engine preampDb.
+// 0..100 acts like a normal volume attenuator.
+// 100 is unity gain.
+// 100..500 applies a smooth boost curve up to +12 dB.
 function boostPercentToPreampDb(percent) {
   const p = Math.max(0, Math.min(500, percent));
   if (p <= 0) return -80.0;
