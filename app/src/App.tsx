@@ -54,13 +54,30 @@ export default function App() {
   }, [])
 
   // ===== visualizer =====
+  const rmsRef = useRef(0)
   useEffect(() => {
-    const iv = setInterval(() => setBars(prev => prev.map(() => {
-      if (!isOn) return 3
-      return Math.random() * 38 + (boost / 300) * 55 + 8
-    })), 90)
+    rmsRef.current = isOn ? Math.max(levels.rmsLeft, levels.rmsRight) : 0
+  }, [levels, isOn])
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const currentRms = rmsRef.current
+      setBars(prev => prev.map((h, i) => {
+        if (!isOn || currentRms < 0.001) {
+          return Math.max(3, h * 0.78)
+        }
+        const decayed = h * 0.78
+        const freqFactor = Math.sin((i / 55) * Math.PI) * 0.8 + 0.2
+        const bandMod = (Math.sin(i * 0.4) + Math.cos(i * 0.7)) * 0.25 + 0.75
+        const targetHeight = freqFactor * bandMod * 65
+        const rmsScale = Math.min(1.0, currentRms * 5.0)
+        const jitter = Math.random() * 10
+        const activeHeight = targetHeight * rmsScale + jitter
+        return Math.max(3, Math.max(decayed, activeHeight))
+      }))
+    }, 60)
     return () => clearInterval(iv)
-  }, [isOn, boost])
+  }, [isOn])
 
   // ===== push params to the self-contained engine (debounced) =====
   const sendRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -120,7 +137,7 @@ export default function App() {
         onDeletePreset={() => { setModal('delete'); setMenuOpen(false) }}
       />
 
-      <EngineBar t={t} engineInstalled={engineInstalled} engineActive={engineActive} levels={levels} onInstall={() => window.api?.installEngine()} />
+      <EngineBar t={t} engineInstalled={engineInstalled} engineActive={engineActive} onInstall={() => window.api?.installEngine()} />
 
       <TopBar t={t} current={current} presetNames={Object.keys(allPresets)} onSelect={loadPreset} bars={bars} isOn={isOn} />
 
