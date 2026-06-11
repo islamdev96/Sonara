@@ -47,6 +47,50 @@ bool IsIeeeFloat(const WAVEFORMATEX* wfx) {
     return false;
 }
 
+// CPolicyConfigClient COM interface definition for changing default audio endpoint
+struct __declspec(uuid("870AF99C-171D-4F9E-AF0D-E63DF40C2BC9")) CPolicyConfigClient;
+struct __declspec(uuid("F8679F50-850A-41CF-9C72-430F290290C8")) IPolicyConfig;
+
+interface IPolicyConfig : public IUnknown
+{
+public:
+    virtual HRESULT STDMETHODCALLTYPE GetMixFormat(PCWSTR, WAVEFORMATEX**);
+    virtual HRESULT STDMETHODCALLTYPE GetDeviceFormat(PCWSTR, INT, WAVEFORMATEX**);
+    virtual HRESULT STDMETHODCALLTYPE ResetDeviceFormat(PCWSTR);
+    virtual HRESULT STDMETHODCALLTYPE SetDeviceFormat(PCWSTR, WAVEFORMATEX*, WAVEFORMATEX*);
+    virtual HRESULT STDMETHODCALLTYPE GetProcessingPeriod(PCWSTR, INT, void*, void*);
+    virtual HRESULT STDMETHODCALLTYPE SetProcessingPeriod(PCWSTR, void*);
+    virtual HRESULT STDMETHODCALLTYPE GetShareMode(PCWSTR, void*);
+    virtual HRESULT STDMETHODCALLTYPE SetShareMode(PCWSTR, void*);
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*);
+    virtual HRESULT STDMETHODCALLTYPE SetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*);
+    virtual HRESULT STDMETHODCALLTYPE SetDefaultEndpoint(PCWSTR wzDeviceId, ERole role);
+    virtual HRESULT STDMETHODCALLTYPE SetEndpointVisibility(PCWSTR, INT);
+};
+
+HRESULT SetDefaultAudioDevice(LPCWSTR wszDeviceId) {
+    IPolicyConfig* pPolicyConfig = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(CPolicyConfigClient), nullptr, 
+                                  CLSCTX_ALL, __uuidof(IPolicyConfig), 
+                                  (LPVOID*)&pPolicyConfig);
+    if (SUCCEEDED(hr) && pPolicyConfig) {
+        hr = pPolicyConfig->SetDefaultEndpoint(wszDeviceId, eConsole);
+        pPolicyConfig->SetDefaultEndpoint(wszDeviceId, eMultimedia);
+        pPolicyConfig->SetDefaultEndpoint(wszDeviceId, eCommunications);
+        pPolicyConfig->Release();
+    }
+    return hr;
+}
+
+LPWSTR g_pwszOriginalDefaultId = nullptr;
+
+BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
+    if (g_pwszOriginalDefaultId) {
+        SetDefaultAudioDevice(g_pwszOriginalDefaultId);
+    }
+    return FALSE; // Let default handler terminate
+}
+
 int main(int argc, char* argv[]) {
     std::cout << "==================================================" << std::endl;
     std::cout << "        Sonara VAD User-Mode Audio Host           " << std::endl;
@@ -82,6 +126,9 @@ int main(int argc, char* argv[]) {
     IMMDevice* pDefaultDevice = nullptr;
     hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDefaultDevice);
     if (SUCCEEDED(hr)) {
+        pDefaultDevice->GetId(&g_pwszOriginalDefaultId);
+        SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+
         IPropertyStore* pProps = nullptr;
         pDefaultDevice->OpenPropertyStore(STGM_READ, &pProps);
         if (pProps) {
@@ -246,6 +293,14 @@ int main(int argc, char* argv[]) {
 
     IAudioRenderClient* pRenderClientService = nullptr;
     pRenderClient->GetService(IID_IAudioRenderClient, (void**)&pRenderClientService);
+
+    // Switch default playback device to the capture device (virtual device)
+    LPWSTR pwszCaptureId = nullptr;
+    if (SUCCEEDED(pCaptureDevice->GetId(&pwszCaptureId)) && pwszCaptureId) {
+        std::wcout << L"[+] Setting default Windows playback device to virtual device: " << pwszCaptureId << std::endl;
+        SetDefaultAudioDevice(pwszCaptureId);
+        CoTaskMemFree(pwszCaptureId);
+    }
 
     // Prepare DSP Engine
     wab::dsp::BoostEngine dspEngine;
@@ -413,6 +468,14 @@ int main(int argc, char* argv[]) {
     pRenderClient->Release();
     pCaptureDevice->Release();
     pRenderDevice->Release();
+    // Restore original default playback device
+    if (g_pwszOriginalDefaultId) {
+        std::wcout << L"[*] Restoring original default Windows playback device..." << std::endl;
+        SetDefaultAudioDevice(g_pwszOriginalDefaultId);
+        CoTaskMemFree(g_pwszOriginalDefaultId);
+        g_pwszOriginalDefaultId = nullptr;
+    }
+
     pEnumerator->Release();
     CoUninitialize();
 

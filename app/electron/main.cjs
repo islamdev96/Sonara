@@ -42,9 +42,11 @@ function startHost() {
     const { spawn } = require('child_process');
     hostProcess = spawn(HOST_EXE, [], {
       detached: true,
-      stdio: 'ignore',
+      stdio: 'pipe',
       windowsHide: true
     });
+    hostProcess.stdout.on('data', (data) => console.log(`[Host] ${data.toString().trim()}`));
+    hostProcess.stderr.on('data', (data) => console.error(`[Host Error] ${data.toString().trim()}`));
     hostProcess.unref();
     console.log("[Host] SonaraHost.exe spawned.");
   } catch (e) {
@@ -55,15 +57,18 @@ function startHost() {
 function stopHost() {
   if (hostProcess) {
     try {
-      process.kill(-hostProcess.pid);
-    } catch (e) {
-      try {
-        hostProcess.kill();
-      } catch (err) {}
-    }
+      hostProcess.kill('SIGINT');
+    } catch (e) {}
     hostProcess = null;
   }
   try {
+    // Try gentle taskkill first to trigger the C++ console control handler
+    execFileSync('taskkill.exe', ['/im', 'SonaraHost.exe'], { stdio: 'ignore', windowsHide: true });
+    // Brief sleep to allow device restoration to complete
+    execFileSync('powershell.exe', ['-Command', 'Start-Sleep -Milliseconds 250'], { stdio: 'ignore', windowsHide: true });
+  } catch (e) {}
+  try {
+    // Force kill fallback
     execFileSync('taskkill.exe', ['/f', '/im', 'SonaraHost.exe'], { stdio: 'ignore', windowsHide: true });
   } catch (e) {}
 }
