@@ -96,7 +96,7 @@ function status() {
   if (left > 0) {
     return { tier: 'trial', maxBoostPercent: 500, trialDaysLeft: left };
   }
-  return { tier: 'free', maxBoostPercent: 100, trialDaysLeft: 0 };
+  return { tier: 'free', maxBoostPercent: 500, trialDaysLeft: 0 };
 }
 
 module.exports = { status, activate, deactivate, trialDaysLeft, verifyKey, LICENSE_FILE };

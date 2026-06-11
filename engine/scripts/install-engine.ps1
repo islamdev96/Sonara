@@ -41,16 +41,22 @@ function Set-MultiStringProperty {
   if ($null -ne $key) {
     $val = $key.GetValue($Name)
     if ($null -ne $val) {
+      $flatString = ""
       if ($val -is [array]) {
-        $list = $val
-      } elseif ($val -is [string]) {
-        $list = $val.Split(@("`r`n", "`n", ",", ";"), [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.Trim() }
+        $flatString = $val -join ","
+      } else {
+        $flatString = $val
+      }
+      if ($flatString -match '\{[a-fA-F0-9-]{36}\}') {
+        $list = @([regex]::Matches($flatString, '\{[a-fA-F0-9-]{36}\}') | ForEach-Object { $_.Value })
+      } else {
+        $list = @($flatString.Split(@("`r`n", "`n", ",", ";"), [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.Trim() })
       }
     }
     $key.Close()
   }
   
-  $list = $list | Where-Object { $_ -ne $ValueToAdd }
+  $list = @($list | Where-Object { $_ -ne $ValueToAdd })
   $list += $ValueToAdd
   
   $rights = [System.Security.AccessControl.RegistryRights]::SetValue -bor [System.Security.AccessControl.RegistryRights]::QueryValues -bor [System.Security.AccessControl.RegistryRights]::ReadKey

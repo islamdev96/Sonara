@@ -82,9 +82,9 @@ public:
                 if (clarityOn_) s = clarity_[c].process(s);
                 // Soft pre-clip: tames extreme peaks from stacked bass/preamp
                 // before they hit the compressor+limiter. Uses tanh saturation
-                // above ~+6dB (2.0 linear) for a gentle knee instead of hard clip.
-                if (std::fabs(s) > 2.0f) {
-                    s = std::copysign(2.0f + std::tanh(std::fabs(s) - 2.0f), s);
+                // above ~+12dB (4.0 linear) for a gentle knee instead of hard clip.
+                if (std::fabs(s) > 4.0f) {
+                    s = std::copysign(4.0f + std::tanh(std::fabs(s) - 4.0f), s);
                 }
                 f[c] = s;
                 detect = std::max(detect, std::fabs(s));

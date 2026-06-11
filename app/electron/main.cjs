@@ -177,7 +177,7 @@ function boostPercentToPreampDb(percent) {
   if (p <= 0) return -80.0;
   if (p <= 100) return 20.0 * Math.log10(p / 100.0);
   const over = (p - 100) / 400; // 0..1
-  const maxDb = 12.0;
+  const maxDb = 18.0;
   return over * maxDb;
 }
 

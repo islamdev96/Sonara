@@ -1,6 +1,7 @@
 // BoosterAPO.cpp - implementation of the System Effect APO. Hosts the portable
 // BoostEngine and pulls live parameters from shared memory. Real-time safe.
 #include "BoosterAPO.h"
+#include <audiomediatype.h>
 #include <new>
 #include <cstring>
 #include <cmath>
@@ -78,8 +79,30 @@ STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMe
     HRESULT hr = pReq->GetUncompressedAudioFormat(&fmt);
     if (FAILED(hr)) return hr;
     
-    // We only support IEEE Float.
+    // We only support IEEE Float. If not float, suggest the closest matching float format.
     if (fmt.guidFormatType != KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
+        if (ppSup == nullptr) {
+            return APOERR_FORMAT_NOT_SUPPORTED;
+        }
+
+        WAVEFORMATEXTENSIBLE wfx = {};
+        wfx.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+        wfx.Format.nChannels = (WORD)fmt.dwSamplesPerFrame;
+        wfx.Format.nSamplesPerSec = (DWORD)fmt.fFramesPerSecond;
+        wfx.Format.wBitsPerSample = 32;
+        wfx.Format.nBlockAlign = (WORD)(wfx.Format.nChannels * 4);
+        wfx.Format.nAvgBytesPerSec = wfx.Format.nSamplesPerSec * wfx.Format.nBlockAlign;
+        wfx.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+        wfx.Samples.wValidBitsPerSample = 32;
+        wfx.dwChannelMask = fmt.dwChannelMask;
+        wfx.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+
+        IAudioMediaType* pProposed = nullptr;
+        hr = CreateAudioMediaType((WAVEFORMATEX*)&wfx, sizeof(WAVEFORMATEXTENSIBLE), &pProposed);
+        if (SUCCEEDED(hr)) {
+            *ppSup = pProposed;
+            return S_FALSE; // S_FALSE indicates a supported fallback format was suggested
+        }
         return APOERR_FORMAT_NOT_SUPPORTED;
     }
     

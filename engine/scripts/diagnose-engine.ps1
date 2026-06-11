@@ -51,13 +51,22 @@ Get-ChildItem $base | ForEach-Object {
         }
         $fmt = (Get-ItemProperty (Join-Path $_.PSPath 'Properties') -Name '{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0').'{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0'
         if ($fmt) {
-            $tag = [BitConverter]::ToUInt16($fmt,0)
-            if ($tag -eq 0xFFFE -and $fmt.Length -ge 40) {
-                $sub = [Guid]::new([byte[]]($fmt[24..39]))
-                if ($sub -eq [Guid]'00000003-0000-0010-8000-00aa00389b71') { Pass "  Device format = IEEE Float (accepted)." }
-                else { Fail "  Device format NOT IEEE Float ($sub). APO rejects it in IsInputFormatSupported -> never loads." }
-            } elseif ($tag -eq 3) { Pass "  Device format = IEEE Float." }
-            else { Fail "  Device format tag=$tag NOT IEEE Float -> APO rejects format." }
+            # Serialized PROPVARIANT type indicator check (VT_BLOB = 65).
+            $offset = 0
+            if ($fmt.Length -ge 8 -and [BitConverter]::ToUInt16($fmt, 0) -eq 65) {
+                $offset = 8
+            }
+            if ($fmt.Length -ge ($offset + 18)) {
+                $tag = [BitConverter]::ToUInt16($fmt, $offset)
+                if ($tag -eq 0xFFFE -and $fmt.Length -ge ($offset + 40)) {
+                    $sub = [Guid]::new([byte[]]($fmt[($offset + 24)..($offset + 39)]))
+                    if ($sub -eq [Guid]'00000003-0000-0010-8000-00aa00389b71') { Pass "  Device format = IEEE Float (accepted)." }
+                    else { Fail "  Device format NOT IEEE Float ($sub). APO rejects it in IsInputFormatSupported -> never loads." }
+                } elseif ($tag -eq 3) { Pass "  Device format = IEEE Float." }
+                else { Fail "  Device format tag=$tag NOT IEEE Float -> APO rejects format." }
+            } else {
+                Fail "  Device format property too short to parse."
+            }
         }
     } else { Warn "  No FxProperties (driver exposes no effect slots)." }
 }
