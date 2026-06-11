@@ -146,13 +146,13 @@ private:
             }
         }
 
-        // Bass = low shelf @ 120 Hz up to +12 dB.
+        // Bass = low shelf @ 105 Hz up to +9 dB.
         bassOn_ = p.bass > 0.001f;
-        if (bassOn_) for (int c = 0; c < ch_; ++c) bass_[c].setLowShelf(sr_, 120.0, 0.707, p.bass * 12.0f);
+        if (bassOn_) for (int c = 0; c < ch_; ++c) bass_[c].setLowShelf(sr_, 105.0, 0.707, p.bass * 9.0f);
 
-        // Clarity = high shelf @ 6 kHz up to +9 dB.
+        // Clarity = high shelf @ 7.5 kHz up to +6 dB.
         clarityOn_ = p.clarity > 0.001f;
-        if (clarityOn_) for (int c = 0; c < ch_; ++c) clarity_[c].setHighShelf(sr_, 6000.0, 0.707, p.clarity * 9.0f);
+        if (clarityOn_) for (int c = 0; c < ch_; ++c) clarity_[c].setHighShelf(sr_, 7500.0, 0.707, p.clarity * 6.0f);
 
         compOn_ = p.dynamic > 0.001f;
         comp_.setAmount(p.dynamic);

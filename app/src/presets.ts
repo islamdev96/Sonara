@@ -11,10 +11,63 @@ export type Preset = {
 }
 
 export const DEFAULTS: Record<string, Preset> = {
-  Default: { eq: [50,50,50,50,50,50,50,50,50,50], boost:100, clarity:0, ambience:0, surround:0, dynamic:0, bass:0 },
-  Music:   { eq: [60,58,52,48,50,55,60,64,62,58], boost:140, clarity:55, ambience:35, surround:35, dynamic:45, bass:65 },
-  Movies:  { eq: [72,66,52,44,52,54,60,70,76,72], boost:170, clarity:65, ambience:75, surround:65, dynamic:70, bass:85 },
-  Gaming:  { eq: [55,48,44,50,66,74,78,68,60,55], boost:160, clarity:75, ambience:55, surround:70, dynamic:55, bass:50 },
-  Voice:   { eq: [40,42,50,62,74,78,72,60,52,48], boost:130, clarity:85, ambience:10, surround:0, dynamic:30, bass:20 },
-  Bass:    { eq: [80,76,66,54,48,48,50,52,54,52], boost:150, clarity:30, ambience:25, surround:30, dynamic:55, bass:100 },
+  Default: {
+    eq: [50,50,50,50,50,50,50,50,50,50],
+    boost: 100,
+    clarity: 0,
+    ambience: 0,
+    surround: 0,
+    dynamic: 0,
+    bass: 0
+  },
+
+  Music: {
+    eq: [56,55,52,49,50,54,58,60,58,55],
+    boost: 135,
+    clarity: 45,
+    ambience: 20,
+    surround: 25,
+    dynamic: 35,
+    bass: 45
+  },
+
+  Movies: {
+    eq: [62,60,54,48,50,53,58,62,64,60],
+    boost: 150,
+    clarity: 50,
+    ambience: 45,
+    surround: 45,
+    dynamic: 55,
+    bass: 60
+  },
+
+  Gaming: {
+    eq: [52,50,48,50,60,66,68,62,56,52],
+    boost: 145,
+    clarity: 60,
+    ambience: 25,
+    surround: 55,
+    dynamic: 40,
+    bass: 35
+  },
+
+  Voice: {
+    eq: [42,44,50,60,70,74,68,58,50,46],
+    boost: 125,
+    clarity: 75,
+    ambience: 0,
+    surround: 0,
+    dynamic: 25,
+    bass: 10
+  },
+
+  Bass: {
+    eq: [68,66,60,52,48,48,50,52,52,50],
+    boost: 140,
+    clarity: 25,
+    ambience: 10,
+    surround: 20,
+    dynamic: 45,
+    bass: 75
+  },
 }

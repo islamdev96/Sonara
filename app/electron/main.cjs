@@ -125,7 +125,7 @@ const state = {
   outputGainDb: 0,
   eqGainsDb: [0,0,0,0,0,0,0,0,0,0],
   bass: 0, clarity: 0, ambience: 0, surround: 0, dynamic: 0,
-  limiterOn: true, limiterCeilingDb: -0.3,
+  limiterOn: true, limiterCeilingDb: -1.0,
 };
 
 // =============================================================================
@@ -174,8 +174,12 @@ function runElevatedPS(scriptPath, args = []) {
 // (unity gain) so the slider can never attenuate system volume — the user
 // expects a "volume booster", not a volume fader.
 function boostPercentToPreampDb(percent) {
-  const ratio = Math.max(1.0, percent / 100.0);
-  return 20.0 * Math.log10(ratio);
+  const p = Math.max(0, Math.min(500, percent));
+  if (p <= 0) return -80.0;
+  if (p <= 100) return 20.0 * Math.log10(p / 100.0);
+  const over = (p - 100) / 400; // 0..1
+  const maxDb = 12.0;
+  return over * maxDb;
 }
 
 function publish() {

@@ -18,7 +18,7 @@ public:
         delayPos_ = 0;
         env_ = 1.0;
         rel_ = std::exp(-1.0 / (0.050 * sr_)); // 50 ms release
-        setCeiling(-0.3f);
+        setCeiling(-1.0f);
     }
 
     void setCeiling(float ceilingDb) noexcept {

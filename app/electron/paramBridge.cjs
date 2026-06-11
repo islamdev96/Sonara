@@ -47,7 +47,7 @@ function serialize(p) {
   buf.writeFloatLE(p.surround || 0, o); o += 4;
   buf.writeFloatLE(p.dynamic || 0, o); o += 4;
   buf.writeInt32LE(p.limiterOn === false ? 0 : 1, o); o += 4;
-  buf.writeFloatLE(typeof p.limiterCeilingDb === 'number' ? p.limiterCeilingDb : -0.3, o); o += 4;
+  buf.writeFloatLE(typeof p.limiterCeilingDb === 'number' ? p.limiterCeilingDb : -1.0, o); o += 4;
   // reserved already zeroed
   return buf;
 }

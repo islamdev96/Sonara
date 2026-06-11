@@ -68,11 +68,11 @@ int main() {
     // 3) Limiter keeps the ceiling even with +30 dB of insane boost.
     {
         BoostEngine eng; eng.prepare(sr, ch);
-        Parameters p; p.seq = 3; p.preampDb = 30.0f; p.limiterOn = 1; p.limiterCeilingDb = -0.3f;
+        Parameters p; p.seq = 3; p.preampDb = 30.0f; p.limiterOn = 1; p.limiterCeilingDb = -1.0f;
         eng.updateParameters(p);
         auto buf = makeSine(frames, ch, sr, 1000.0, 0.5f);
         eng.process(buf.data(), frames);
-        const float ceil = std::pow(10.0f, -0.3f / 20.0f);
+        const float ceil = std::pow(10.0f, -1.0f / 20.0f);
         check(finiteAll(buf), "limiter output finite");
         check(peak(buf) <= ceil + 1e-3f, "limiter holds output under ceiling");
     }

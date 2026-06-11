@@ -37,7 +37,7 @@ struct Parameters {
     float    dynamic     = 0.0f;      // 0..1 -> compressor amount (loudness)
 
     int32_t  limiterOn   = 1;         // brickwall limiter to stop clipping
-    float    limiterCeilingDb = -0.3f;// output ceiling
+    float    limiterCeilingDb = -1.0f;// output ceiling
 
     uint32_t reserved[8] = {0,0,0,0,0,0,0,0}; // future use, keeps ABI stable
 };
