@@ -73,3 +73,23 @@ target_link_libraries(SonaraHost PRIVATE
     ole32 oleaut32 uuid propsys Winmm avrt
 )
 
+# =============================================================================
+# Option 4: Native C++ WebView2 Control Panel GUI
+# =============================================================================
+if(WIN32 AND MSVC)
+    add_executable(SonaraGUI WIN32
+        src/gui/main.cpp
+        src/gui/resources.rc
+    )
+    target_include_directories(SonaraGUI PRIVATE 
+        src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../webview2_sdk/build/native/include
+    )
+    target_link_libraries(SonaraGUI PRIVATE
+        ole32 oleaut32 uuid propsys shell32 comctl32
+        ${CMAKE_CURRENT_SOURCE_DIR}/../webview2_sdk/build/native/x64/WebView2LoaderStatic.lib
+    )
+endif()
+
+
+

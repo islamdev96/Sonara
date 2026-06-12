@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { LicenseStatus, EngineLevels } from '../global'
 
 // Owns the live connection to the native engine: initial status, plus the
-// engine-installed and license push events from the Electron main process.
+// engine-installed and license push events from the native C++ main process.
 // Also receives real-time audio levels from the APO's status.bin heartbeat.
 export function useEngine() {
   const [status, setStatus] = useState({ installed: false, active: false })

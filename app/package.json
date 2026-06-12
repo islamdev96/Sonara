@@ -6,38 +6,11 @@
   "description": "Sonara — self-contained Windows audio booster & enhancer (own engine, no third-party drivers).",
   "author": "Sonara",
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "electron:start": "cross-env NODE_ENV=development concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder",
-    "dist": "npm run build && electron-builder --win nsis"
-  },
-  "build": {
-    "appId": "app.sonara.desktop",
-    "productName": "Sonara",
-    "publish": null,
-    "directories": { "output": "release", "buildResources": "build" },
-    "files": ["dist/**/*", "electron/**/*"],
-    "extraResources": [
-      { "from": "../build/Release/SonaraHost.exe", "to": "engine/SonaraHost.exe" },
-      { "from": "../build/Release/SonaraAPO.dll", "to": "engine/SonaraAPO.dll" },
-      { "from": "../engine/scripts/install-engine.ps1", "to": "engine/install-engine.ps1" },
-      { "from": "../engine/scripts/uninstall-engine.ps1", "to": "engine/uninstall-engine.ps1" }
-    ],
-    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.ico" },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowElevation": true,
-      "include": "build/installer.nsh",
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "runAfterFinish": true
-    }
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.2.6",
@@ -49,17 +22,12 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "concurrently": "^10.0.3",
-    "cross-env": "^10.1.0",
-    "electron": "^42.3.3",
-    "electron-builder": "^26.8.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
-    "vite": "^8.0.12",
-    "wait-on": "^9.0.10"
+    "vite": "^8.0.12"
   }
 }

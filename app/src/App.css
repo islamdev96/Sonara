@@ -64,7 +64,6 @@ body {
   align-items: center;
   gap: 12px;
   -webkit-app-region: no-drag;
-  margin-right: 140px; /* Leave space for Electron title bar controls on Windows */
 }
 
 .power-btn {
@@ -608,7 +607,7 @@ input[type=range]:disabled {
 .rtl-layout .slider-header { flex-direction: row-reverse; }
 .rtl-layout .menu-item { text-align: right; }
 .rtl-layout .header-right { margin-right: 0; }
-.rtl-layout .brand { margin-right: 140px; }
+.rtl-layout .brand { margin-right: 0; }
 /* ===== Commercial additions (imported by App.css) ===== */
 .license-pill { font-size: 11px; padding: 3px 10px; border-radius: 999px; cursor: pointer; user-select: none;
   border: 1px solid rgba(255,255,255,.15); color: #cfd2da; transition: .15s; }

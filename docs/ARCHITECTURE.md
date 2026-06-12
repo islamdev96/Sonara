@@ -1,25 +1,23 @@
 # Architecture
 
-Sonara is split into two independent halves that share nothing but a tiny binary
-parameter file. This keeps the real-time audio code small and dependency-free,
-and lets the UI be a normal desktop app.
+Sonara is split into two independent halves: a lightweight native audio engine and an ultra-lightweight C++ WebView2 frontend container. They share nothing but tiny binary parameter and status files via memory-mapped files. This keeps the real-time audio code small and dependency-free, and ensures a crash or hang in the UI cannot stall the real-time audio stream.
 
 ```mermaid
 flowchart TD
-    subgraph App["app/ (Electron + React)"]
-        UI["Control panel\nEQ / boost / VU Meter"]
-        Bridge["paramBridge.cjs\n(writes params.bin)"]
-        StatusBridge["statusBridge.cjs\n(reads status.bin)"]
-        UI --> Bridge
-        StatusBridge --> UI
+    subgraph GUI["GUI Container (engine/src/gui/main.cpp -> SonaraGUI.exe)"]
+        UI["React Frontend UI\n(app/dist/ -> https://sonara.local)"]
+        Bridge["C++ WebMessage Handler\n(writes params.bin)"]
+        StatusBridge["C++ statusReader timer\n(reads status.bin)"]
+        UI -- "window.api.setParams" --> Bridge
+        StatusBridge -- "PostWebMessage" --> UI
     end
 
     Params[("params.bin\n%ProgramData%\\Sonara")]
     Status[("status.bin\n%ProgramData%\\Sonara")]
     Bridge -- "memory-mapped write" --> Params
-    Status -- "file read" --> StatusBridge
+    Status -- "memory-mapped read" --> StatusBridge
 
-    subgraph Host["engine/ (User-mode Host: SonaraHost.exe)"]
+    subgraph Host["Engine (engine/src/host/main.cpp -> SonaraHost.exe)"]
         Shared["SharedParams\n(seqlock reader)"]
         SharedStatus["SharedStatus\n(seqlock writer)"]
         Chain["DSP chain"]
@@ -37,8 +35,7 @@ flowchart TD
 
 ## 1. The DSP core (`engine/src/dsp/`)
 
-Header-only, portable C++20 with **no OS or Windows dependency**, so it compiles
-and is unit-tested on Linux CI. Signal flow inside `BoostEngine`:
+Header-only, portable C++20 with **no OS or Windows dependency**, so it compiles and is unit-tested on Linux CI. Signal flow inside `BoostEngine`:
 
 ```
 input → preamp → 10-band EQ → bass → clarity → [soft pre-clip] → compressor → stereo widen (w/ mono compatibility) → output gain → limiter → output
@@ -53,8 +50,7 @@ input → preamp → 10-band EQ → bass → clarity → [soft pre-clip] → com
 | `StereoEnhancer.h` | Mid/side width + ambience (with automatic mono-compatibility correlation protection). |
 | `BoostEngine.h` | Orchestrates the full chain (including tanh soft pre-clipper for gain staging protection). |
 
-Because it is pure and allocation-free on the audio path, the same core can be
-reused later for a microphone engine or a macOS port.
+Because it is pure and allocation-free on the audio path, the same core can be reused later for a microphone engine or a macOS port.
 
 ## 2. The Windows User-Mode Host & Legacy APO Shell (`engine/src/host/` & `engine/src/apo/`)
 
@@ -62,7 +58,7 @@ In the user-mode VAD architecture, instead of injecting an APO DLL directly into
 
 | File / Component | Responsibility |
 |------|----------------|
-| `src/host/main.cpp` | The user-mode host entry point. Performs WASAPI Loopback capture from the virtual playback device (e.g. FxSound Speakers or VB-CABLE), processes the buffer with `BoostEngine` in-place, and renders to the real physical device (e.g. Speakers). |
+| `src/host/main.cpp` | The user-mode host entry point. Performs WASAPI Loopback capture from the virtual playback device, processes the buffer with `BoostEngine` in-place, and renders to the real physical device (e.g. Speakers). |
 | `src/apo/SharedParams.h` | Maps `params.bin` and reads parameters with a seqlock (RT-thread safe, pinned memory via `VirtualLock`, no page faults). |
 | `src/apo/SharedStatus.h` | Maps `status.bin` and writes heartbeat + audio levels with a seqlock (RT-thread safe, pinned memory). |
 | `src/apo/StatusBlock.h` | Defines the binary POD structure for the heartbeat/RMS status bridge. |
@@ -70,34 +66,28 @@ In the user-mode VAD architecture, instead of injecting an APO DLL directly into
 
 ## 3. The parameter and status bridges (Bi-directional IPC)
 
-The UI never talks to the audio processing thread directly, ensuring a crash or hang in the UI cannot stall the physical audio stream. Communication is completely bi-directional via memory-mapped files:
+The UI never talks to the audio processing thread directly. Communication is completely bi-directional via memory-mapped files:
 
 - **Parameter Bridge (UI → Host):**
   - **File:** `C:\ProgramData\Sonara\params.bin`
   - **Concurrency:** A sequence counter (seqlock) lets the reader detect torn writes and skip them. It uses `YieldProcessor()` rather than `Sleep(0)` in its retry spinloop to be completely real-time safe.
   - **Layout:** Magic `WABP`, version, sequence counter, enabled flag, preampDb, outputGainDb, the 10-band EQ gains, and the enhancer and limiter settings. Pinned via `VirtualLock` to avoid soft page faults on the RT audio thread.
-  - **Path:** `app/electron/paramBridge.cjs` (writer) and `engine/src/apo/SharedParams.h` (reader, utilized by `SonaraHost.exe`).
+  - **Path:** `SonaraGUI.exe` C++ side writes `params.bin` upon receiving `set-params` messages from the React app.
 
 - **Status Bridge (Host → UI):**
   - **File:** `C:\ProgramData\Sonara\status.bin`
-  - **Concurrency:** A seqlock-protected writer avoids torn writes. The host writes processing stats and heartbeat every ~100ms.
+  - **Concurrency:** A seqlock-protected writer avoids torn writes. The host writes processing stats and heartbeat every ~50ms.
   - **Layout:** Magic `WABS`, sequence counter, heartbeat tick, RMS levels (L/R), Peak levels (L/R), sample rate, and channels. Pinned via `VirtualLock` to guarantee RT-thread safety.
-  - **Path:** `engine/src/apo/SharedStatus.h` / `StatusBlock.h` (writer, utilized by `SonaraHost.exe`) and `app/electron/statusBridge.cjs` (reader). Used to verify the host is actually running and drive the live VU meter in the UI.
+  - **Path:** `SonaraGUI.exe` runs a 50ms polling timer to read `status.bin` and posts it to the WebView2 React frontend to drive the real-time visualizer.
 
-## 4. The desktop app (`app/`)
+## 4. The desktop app (`app/` & `engine/src/gui/`)
 
-- `electron/main.cjs` — window/tray lifecycle, global hotkeys, status polling, and elevated engine management.
-- `electron/paramBridge.cjs` — serializes UI state into `params.bin`.
-- `electron/statusBridge.cjs` — parses `status.bin` to check heartbeat freshness and expose RMS/peak levels.
-- `electron/licensing.cjs` — offline Ed25519 license verification + trial; the `LAUNCH_FREE` flag unlocks everything.
-- `electron/preload.cjs` — safe IPC surface exposed to the renderer (including audio levels events).
-- `src/` — React control panel (presets, EQ sliders, enhancers, VU meter, i18n EN/AR).
+- `engine/src/gui/main.cpp` — Native Win32 window initialization, System Tray menu integration, WebView2 hosting environment, Javascript bridge injection (`window.api`), and elevated power-shell scripting for APO installation.
+- `app/dist/` — React control panel (presets, EQ sliders, enhancers, VU meter, i18n EN/AR). Mapped as `https://sonara.local` for high performance and sandboxed local execution.
 
 ### Renderer structure (`app/src/`)
 
-The UI follows a single-responsibility layout: `App.tsx` is a thin orchestrator
-that owns state and effects, while data, side-effects, and presentation each
-live in their own module.
+The UI follows a single-responsibility layout: `App.tsx` is a thin orchestrator that owns state and effects, while data, side-effects, and presentation each live in their own module.
 
 ```
 src/
@@ -105,7 +95,7 @@ src/
 ├─ i18n.ts            # EN/AR strings + `Strings`/`Lang` types
 ├─ presets.ts         # `Preset` type + built-in DEFAULTS
 ├─ audio.ts           # pure unit helpers (posToDb, norm) + EQ band labels
-├─ global.d.ts        # window.api typings (IPC contract with preload)
+├─ global.d.ts        # window.api typings (IPC contract with C++ bridge)
 ├─ hooks/
 │  ├─ useEngine.ts        # native engine status + license via IPC events
 │  ├─ useLocalStorage.ts  # generic typed localStorage-backed state
@@ -121,18 +111,13 @@ src/
 ```
 
 Design rules:
-
-- **Pure helpers (`audio.ts`, `presets.ts`) have no React dependency**, so they
-  can be unit-tested or reused outside the renderer.
-- **Hooks own side-effects.** `useEngine` is the only place that subscribes to
-  IPC events; `usePresets`/`useLocalStorage` are the only places that touch
-  `localStorage`. Components never reach for `window.api` or storage directly.
-- **Components are presentational** — they receive data and callbacks as props
-  and hold no business logic. The preset ↔ live-audio-state mapping stays in
-  `App.tsx`, which owns that state.
+- **Pure helpers (`audio.ts`, `presets.ts`) have no React dependency**, so they can be unit-tested or reused outside the renderer.
+- **Hooks own side-effects.** `useEngine` is the only place that subscribes to C++ `window.api` events; `usePresets`/`useLocalStorage` are the only places that touch `localStorage`. Components never reach for `window.api` or storage directly.
+- **Components are presentational** — they receive data and callbacks as props and hold no business logic. The preset ↔ live-audio-state mapping stays in `App.tsx`, which owns that state.
 
 ## Why this split
 
 - The audio-thread code stays tiny, portable, and testable.
-- The UI can use the full Electron/React stack without touching real-time code.
+- The UI can use the full React stack without touching real-time code.
 - A crash or hang in the UI cannot stall the audio engine.
+

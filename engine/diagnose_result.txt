@@ -1,0 +1,46 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260613021522
+Username: DESKTOP-35IK1QI\Islam Glab
+RunAs User: DESKTOP-35IK1QI\Islam Glab
+Configuration Name: 
+Machine: DESKTOP-35IK1QI (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File c:\Users\Islam Glab\Desktop\Sonara\engine\scripts\diagnose-engine.ps1
+Process ID: 12192
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is C:\Users\Islam Glab\Desktop\Sonara\engine\scripts\..\diagnose_result.txt
+[WARN] Not running as Administrator. Registry endpoint details might be incomplete.
+=== Sonara engine diagnostics ===
+[PASS] DLL present: C:\Windows\System32\SonaraAPO.dll
+[PASS] COM InprocServer32 -> C:\Windows\System32\SonaraAPO.dll
+[PASS] APO registered under AudioEngine\AudioProcessingObjects.
+
+-- Active device: Speakers/Headphones [{8cab9281-f2b9-4cb8-868e-120a83e96785}]
+[PASS]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5 OK (REG_MULTI_SZ) -> {EACD2258-FCAC-4FF4-B36D-419E924A6D79}, {538B6BB6-27D6-4D50-A09D-6E1883A66888}
+[PASS]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6 OK (REG_MULTI_SZ) -> {A296D363-EE83-4af9-9BE7-729C1296150A}, {538B6BB6-27D6-4D50-A09D-6E1883A66888}
+[FAIL]   Device format NOT IEEE Float (00000001-0000-0010-8000-00aa00389b71). APO rejects it in IsInputFormatSupported -> never loads.
+
+-- Active device: FxSound Speakers [{d4c9db24-61f7-4c90-9afd-ad9c0d06f7fd}]
+[PASS]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5 OK (REG_MULTI_SZ) -> {538B6BB6-27D6-4D50-A09D-6E1883A66888}
+[PASS]   {D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6 OK (REG_MULTI_SZ) -> {538B6BB6-27D6-4D50-A09D-6E1883A66888}
+[FAIL]   Device format NOT IEEE Float (00000001-0000-0010-8000-00aa00389b71). APO rejects it in IsInputFormatSupported -> never loads.
+
+-- audiodg.exe module check --
+[FAIL] SonaraAPO.dll NOT found in audiodg.exe (note: audiodg is protected, may be a false negative -> rely on heartbeat below).
+
+-- status.bin heartbeat (only updates if APO code runs inside audiodg) --
+[FAIL] status.bin NOT updating => APO is not running (make sure audio is playing, then re-run).
+
+=== The truth is the heartbeat line (#6). If it is FAIL while audio plays, the APO is not in the path. ===
+**********************
+Windows PowerShell transcript end
+End time: 20260613021525
+**********************
