@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <timeapi.h>
+#include <avrt.h>
 
 #include "../dsp/BoostEngine.h"
 #include "../apo/SharedParams.h"
@@ -91,7 +92,143 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
     return FALSE; // Let default handler terminate
 }
 
+// Simple multi-channel linear resampler
+struct Resampler {
+    double sampleRateIn = 0.0;
+    double sampleRateOut = 0.0;
+    int channels = 0;
+    std::vector<float> lastFrame;
+    double phase = 0.0;
+    bool active = false;
+
+    void prepare(double srIn, double srOut, int ch) {
+        sampleRateIn = srIn;
+        sampleRateOut = srOut;
+        channels = ch;
+        lastFrame.assign(ch, 0.0f);
+        phase = 0.0;
+        active = (std::abs(srIn - srOut) > 0.1);
+    }
+
+    void process(const float* input, int inputFrames, std::vector<float>& output) {
+        if (!active) {
+            output.assign(input, input + inputFrames * channels);
+            return;
+        }
+
+        double ratio = sampleRateIn / sampleRateOut;
+        int estimatedOutputFrames = static_cast<int>(inputFrames / ratio) + 2;
+        output.clear();
+        output.reserve(estimatedOutputFrames * channels);
+
+        int inIdx = -1;
+        while (true) {
+            int nextInIdx = inIdx + 1;
+            const float* currentFrame = nullptr;
+            const float* nextFrame = nullptr;
+
+            if (inIdx < 0) {
+                currentFrame = lastFrame.data();
+            } else if (inIdx < inputFrames) {
+                currentFrame = input + inIdx * channels;
+            } else {
+                break;
+            }
+
+            if (nextInIdx < 0) {
+                nextFrame = lastFrame.data();
+            } else if (nextInIdx < inputFrames) {
+                nextFrame = input + nextInIdx * channels;
+            } else {
+                break;
+            }
+
+            float t = static_cast<float>(phase);
+            for (int c = 0; c < channels; ++c) {
+                float sample = currentFrame[c] * (1.0f - t) + nextFrame[c] * t;
+                output.push_back(sample);
+            }
+
+            phase += ratio;
+            int advance = static_cast<int>(std::floor(phase));
+            phase -= advance;
+            inIdx += advance;
+        }
+
+        if (inputFrames > 0) {
+            std::copy(input + (inputFrames - 1) * channels, input + inputFrames * channels, lastFrame.begin());
+        }
+    }
+};
+
+static void ConvertToFloat(const BYTE* pData, float* outBuf, DWORD numFrames, WORD channels, WORD bitsPerSample, bool isFloat, DWORD flags) {
+    size_t numSamples = numFrames * channels;
+    if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+        std::memset(outBuf, 0, numSamples * sizeof(float));
+        return;
+    }
+
+    if (isFloat && bitsPerSample == 32) {
+        std::memcpy(outBuf, pData, numSamples * sizeof(float));
+    } else if (bitsPerSample == 16) {
+        const short* pShort = reinterpret_cast<const short*>(pData);
+        for (size_t i = 0; i < numSamples; ++i) {
+            outBuf[i] = pShort[i] / 32768.0f;
+        }
+    } else if (bitsPerSample == 32) {
+        const int32_t* pInt = reinterpret_cast<const int32_t*>(pData);
+        for (size_t i = 0; i < numSamples; ++i) {
+            outBuf[i] = pInt[i] / 2147483648.0f;
+        }
+    } else if (bitsPerSample == 24) {
+        for (size_t i = 0; i < numSamples; ++i) {
+            int32_t val = (pData[3 * i] << 8) | (pData[3 * i + 1] << 16) | (pData[3 * i + 2] << 24);
+            outBuf[i] = val / 2147483648.0f;
+        }
+    } else {
+        std::memset(outBuf, 0, numSamples * sizeof(float));
+    }
+}
+
+static void ConvertFromFloat(const float* inBuf, BYTE* pData, DWORD numFrames, WORD channels, WORD bitsPerSample, bool isFloat) {
+    size_t numSamples = numFrames * channels;
+    if (isFloat && bitsPerSample == 32) {
+        std::memcpy(pData, inBuf, numSamples * sizeof(float));
+    } else if (bitsPerSample == 16) {
+        short* pShort = reinterpret_cast<short*>(pData);
+        for (size_t i = 0; i < numSamples; ++i) {
+            float val = inBuf[i] * 32767.0f;
+            pShort[i] = static_cast<short>(std::clamp(val, -32768.0f, 32767.0f));
+        }
+    } else if (bitsPerSample == 32) {
+        int32_t* pInt = reinterpret_cast<int32_t*>(pData);
+        for (size_t i = 0; i < numSamples; ++i) {
+            float val = inBuf[i] * 2147483647.0f;
+            pInt[i] = static_cast<int32_t>(std::clamp(val, -2147483648.0f, 2147483647.0f));
+        }
+    } else if (bitsPerSample == 24) {
+        for (size_t i = 0; i < numSamples; ++i) {
+            float val = inBuf[i] * 8388607.0f;
+            int32_t ival = static_cast<int32_t>(std::clamp(val, -8388608.0f, 8388607.0f));
+            pData[3 * i] = ival & 0xFF;
+            pData[3 * i + 1] = (ival >> 8) & 0xFF;
+            pData[3 * i + 2] = (ival >> 16) & 0xFF;
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
+    // Enable MMCSS for the audio loop thread and set to time critical priority
+    DWORD taskIndex = 0;
+    HANDLE hTask = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
+    if (hTask == NULL) {
+        std::cerr << "[-] Warning: Failed to enable MMCSS Pro Audio: " << GetLastError() << std::endl;
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+    } else {
+        std::cout << "[+] MMCSS Pro Audio enabled successfully." << std::endl;
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+    }
+
     std::cout << "==================================================" << std::endl;
     std::cout << "        Sonara VAD User-Mode Audio Host           " << std::endl;
     std::cout << "==================================================" << std::endl;
@@ -273,9 +410,23 @@ int main(int argc, char* argv[]) {
     pCaptureClient->GetMixFormat(&pwfxCapture);
     std::cout << "[+] Capture Mix Format: " << pwfxCapture->nSamplesPerSec << " Hz, " << pwfxCapture->nChannels << " channels, " << pwfxCapture->wBitsPerSample << " bits" << std::endl;
 
-    hr = pCaptureClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, pwfxCapture, nullptr);
+    HANDLE hCaptureEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!hCaptureEvent) {
+        std::cerr << "[-] Failed to create capture event." << std::endl;
+        return 1;
+    }
+
+    hr = pCaptureClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 300000, 0, pwfxCapture, nullptr);
     if (FAILED(hr)) {
         std::cerr << "[-] Failed to initialize capture client loopback: hr = " << std::hex << hr << std::endl;
+        CloseHandle(hCaptureEvent);
+        return 1;
+    }
+
+    hr = pCaptureClient->SetEventHandle(hCaptureEvent);
+    if (FAILED(hr)) {
+        std::cerr << "[-] Failed to set capture event handle: hr = " << std::hex << hr << std::endl;
+        CloseHandle(hCaptureEvent);
         return 1;
     }
 
@@ -292,18 +443,23 @@ int main(int argc, char* argv[]) {
 
     WAVEFORMATEX* pwfxRender = nullptr;
     pRenderClient->GetMixFormat(&pwfxRender);
-    std::cout << "[+] Render Mix Format: " << pwfxRender->nSamplesPerSec << " Hz, " << pwfxRender->nChannels << " channels, " << pwfxRender->wBitsPerSample << " bits" << std::endl;
+    std::cout << "[+] Render Native Mix Format: " << pwfxRender->nSamplesPerSec << " Hz, " << pwfxRender->nChannels << " channels, " << pwfxRender->wBitsPerSample << " bits" << std::endl;
 
-    if (pwfxCapture->nSamplesPerSec != pwfxRender->nSamplesPerSec || pwfxCapture->nChannels != pwfxRender->nChannels) {
-        std::cerr << "[!] WARNING: Format mismatch! Capture=" << pwfxCapture->nSamplesPerSec << "Hz Render=" << pwfxRender->nSamplesPerSec << "Hz." << std::endl;
-        std::cerr << "[!] Please open Windows Sound Control Panel and set both devices to the same format (e.g. 48000 Hz, Stereo)." << std::endl;
-    }
-
-    hr = pRenderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 0, 0, pwfxRender, nullptr);
+    WAVEFORMATEX* pwfxRenderToUse = pwfxCapture;
+    std::cout << "[+] Attempting to initialize Render client with Capture format..." << std::endl;
+    hr = pRenderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 400000, 0, pwfxRenderToUse, nullptr);
     if (FAILED(hr)) {
-        std::cerr << "[-] Failed to initialize render client: hr = " << std::hex << hr << std::endl;
-        return 1;
+        std::cout << "[*] Failed to initialize with Capture format. Falling back to native Render format..." << std::endl;
+        pwfxRenderToUse = pwfxRender;
+        hr = pRenderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 400000, 0, pwfxRenderToUse, nullptr);
+        if (FAILED(hr)) {
+            std::cerr << "[-] Failed to initialize render client: hr = " << std::hex << hr << std::endl;
+            return 1;
+        }
+    } else {
+        std::cout << "[+] Render client successfully initialized with Capture format." << std::endl;
     }
+    pwfxRender = pwfxRenderToUse;
 
     IAudioRenderClient* pRenderClientService = nullptr;
     pRenderClient->GetService(IID_IAudioRenderClient, (void**)&pRenderClientService);
@@ -362,7 +518,12 @@ int main(int argc, char* argv[]) {
     float rawSamplesAcc[256] = {0};
     bool isFloatCapture = IsIeeeFloat(pwfxCapture);
     bool isFloatRender = IsIeeeFloat(pwfxRender);
+    std::cout << "[+] Capture Float: " << (isFloatCapture ? "YES" : "NO") << std::endl;
+    std::cout << "[+] Render Float: " << (isFloatRender ? "YES" : "NO") << std::endl;
     std::vector<float> fifoBuffer;
+
+    Resampler resampler;
+    resampler.prepare(pwfxCapture->nSamplesPerSec, pwfxRender->nSamplesPerSec, pwfxRender->nChannels);
 
     while (true) {
         // Read updated parameters from UI
@@ -391,19 +552,7 @@ int main(int argc, char* argv[]) {
                 std::vector<float> processBuf(numFramesRead * channels, 0.0f);
 
                 // 1. Convert captured data to float
-                if (isFloatCapture) {
-                    if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
-                        std::memcpy(processBuf.data(), pData, processBuf.size() * sizeof(float));
-                    }
-                } else {
-                    // Convert 16-bit short PCM to float
-                    const short* pShortData = reinterpret_cast<const short*>(pData);
-                    if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
-                        for (size_t i = 0; i < processBuf.size(); ++i) {
-                            processBuf[i] = pShortData[i] / 32768.0f;
-                        }
-                    }
-                }
+                ConvertToFloat(pData, processBuf.data(), numFramesRead, channels, pwfxCapture->wBitsPerSample, isFloatCapture, flags);
 
                 // 2. Process through DSP
                 dspEngine.process(processBuf.data(), numFramesRead);
@@ -434,8 +583,52 @@ int main(int argc, char* argv[]) {
                 }
                 frameCountAcc += numFramesRead;
 
-                // Push processed samples to FIFO buffer
-                fifoBuffer.insert(fifoBuffer.end(), processBuf.begin(), processBuf.end());
+                // Channel conversion from Capture Channels to Render Channels
+                int renderChannels = pwfxRender->nChannels;
+                std::vector<float> renderReadyBuf(numFramesRead * renderChannels, 0.0f);
+                if (channels == renderChannels) {
+                    renderReadyBuf = processBuf;
+                } else if (channels == 2 && renderChannels == 1) {
+                    for (UINT32 f = 0; f < numFramesRead; ++f) {
+                        renderReadyBuf[f] = (processBuf[f * 2] + processBuf[f * 2 + 1]) * 0.5f;
+                    }
+                } else if (channels == 1 && renderChannels == 2) {
+                    for (UINT32 f = 0; f < numFramesRead; ++f) {
+                        float mono = processBuf[f];
+                        renderReadyBuf[f * 2] = mono;
+                        renderReadyBuf[f * 2 + 1] = mono;
+                    }
+                } else if (channels == 2 && renderChannels > 2) {
+                    for (UINT32 f = 0; f < numFramesRead; ++f) {
+                        float l = processBuf[f * 2];
+                        float r = processBuf[f * 2 + 1];
+                        renderReadyBuf[f * renderChannels + 0] = l; // FL
+                        renderReadyBuf[f * renderChannels + 1] = r; // FR
+                        if (renderChannels > 2) renderReadyBuf[f * renderChannels + 2] = (l + r) * 0.5f; // Center
+                        if (renderChannels > 4) {
+                            renderReadyBuf[f * renderChannels + 4] = l; // BL
+                            renderReadyBuf[f * renderChannels + 5] = r; // BR
+                        }
+                        if (renderChannels > 7) {
+                            renderReadyBuf[f * renderChannels + 6] = l; // SL
+                            renderReadyBuf[f * renderChannels + 7] = r; // SR
+                        }
+                    }
+                } else {
+                    int minCh = std::min((int)channels, (int)renderChannels);
+                    for (UINT32 f = 0; f < numFramesRead; ++f) {
+                        for (int c = 0; c < minCh; ++c) {
+                            renderReadyBuf[f * renderChannels + c] = processBuf[f * channels + c];
+                        }
+                    }
+                }
+
+                // Resample to render rate if necessary
+                std::vector<float> resampledBuf;
+                resampler.process(renderReadyBuf.data(), numFramesRead, resampledBuf);
+
+                // Push processed & resampled samples to FIFO buffer
+                fifoBuffer.insert(fifoBuffer.end(), resampledBuf.begin(), resampledBuf.end());
             }
 
             pCaptureClientService->ReleaseBuffer(numFramesRead);
@@ -448,10 +641,10 @@ int main(int argc, char* argv[]) {
         int renderChannels = pwfxRender->nChannels;
         UINT32 fifoFrames = (UINT32)(fifoBuffer.size() / renderChannels);
 
-        // Drift protection: if FIFO accumulates too much lag (e.g. > 80ms), trim it back to 20ms
-        UINT32 maxFifoFrames = (pwfxCapture->nSamplesPerSec * 80) / 1000;
+        // Drift protection using render rate
+        UINT32 maxFifoFrames = (pwfxRender->nSamplesPerSec * 80) / 1000;
         if (fifoFrames > maxFifoFrames) {
-            UINT32 targetFifoFrames = (pwfxCapture->nSamplesPerSec * 20) / 1000;
+            UINT32 targetFifoFrames = (pwfxRender->nSamplesPerSec * 20) / 1000;
             size_t dropSamples = (fifoFrames - targetFifoFrames) * renderChannels;
             if (fifoBuffer.size() > dropSamples) {
                 fifoBuffer.erase(fifoBuffer.begin(), fifoBuffer.begin() + dropSamples);
@@ -462,25 +655,37 @@ int main(int argc, char* argv[]) {
         UINT32 numPaddingFrames = 0;
         hr = pRenderClient->GetCurrentPadding(&numPaddingFrames);
         if (SUCCEEDED(hr)) {
+            // Target render padding to prevent underrun (30ms)
+            UINT32 targetPadding = (pwfxRender->nSamplesPerSec * 30) / 1000;
+
+            // Only write cushion if we actually have audio in the FIFO to play
+            if (fifoFrames > 0 && (numPaddingFrames + fifoFrames < targetPadding)) {
+                UINT32 cushionFrames = targetPadding - (numPaddingFrames + fifoFrames);
+                UINT32 numFreeFrames = renderBufferSize - numPaddingFrames;
+                if (cushionFrames > numFreeFrames) {
+                    cushionFrames = numFreeFrames;
+                }
+                if (cushionFrames > 0) {
+                    BYTE* pRenderData = nullptr;
+                    hr = pRenderClientService->GetBuffer(cushionFrames, &pRenderData);
+                    if (SUCCEEDED(hr) && pRenderData) {
+                        std::memset(pRenderData, 0, cushionFrames * pwfxRender->nBlockAlign);
+                        pRenderClientService->ReleaseBuffer(cushionFrames, 0);
+                        numPaddingFrames += cushionFrames;
+                    }
+                }
+            }
+
             UINT32 numFreeFrames = renderBufferSize - numPaddingFrames;
             UINT32 framesToWrite = std::min(numFreeFrames, fifoFrames);
+            
             if (framesToWrite > 0) {
                 BYTE* pRenderData = nullptr;
                 hr = pRenderClientService->GetBuffer(framesToWrite, &pRenderData);
                 if (SUCCEEDED(hr) && pRenderData) {
-                    size_t samplesToWrite = framesToWrite * renderChannels;
-                    if (isFloatRender) {
-                        std::memcpy(pRenderData, fifoBuffer.data(), samplesToWrite * sizeof(float));
-                    } else {
-                        // Convert float back to 16-bit PCM
-                        short* pRenderShort = reinterpret_cast<short*>(pRenderData);
-                        for (size_t i = 0; i < samplesToWrite; ++i) {
-                            float val = fifoBuffer[i] * 32767.0f;
-                            pRenderShort[i] = static_cast<short>(std::clamp(val, -32768.0f, 32767.0f));
-                        }
-                    }
+                    ConvertFromFloat(fifoBuffer.data(), pRenderData, framesToWrite, renderChannels, pwfxRender->wBitsPerSample, isFloatRender);
                     pRenderClientService->ReleaseBuffer(framesToWrite, 0);
-                    fifoBuffer.erase(fifoBuffer.begin(), fifoBuffer.begin() + samplesToWrite);
+                    fifoBuffer.erase(fifoBuffer.begin(), fifoBuffer.begin() + (framesToWrite * renderChannels));
                 }
             }
         }
@@ -526,11 +731,15 @@ int main(int argc, char* argv[]) {
             lastStatusWriteTicks = nowTicks;
         }
 
-        // 1ms sleep to avoid pinning the CPU (avoids 100% core load)
-        Sleep(1);
+        // Wait for next capture packet with 500ms timeout
+        WaitForSingleObject(hCaptureEvent, 500);
     }
 
     timeEndPeriod(1);
+
+    if (hTask) {
+        AvRevertMmThreadCharacteristics(hTask);
+    }
 
     // Stop streams
     pCaptureClient->Stop();
@@ -543,6 +752,9 @@ int main(int argc, char* argv[]) {
     pRenderClient->Release();
     pCaptureDevice->Release();
     pRenderDevice->Release();
+    if (hCaptureEvent) {
+        CloseHandle(hCaptureEvent);
+    }
     // Restore original default playback device
     if (g_pwszOriginalDefaultId) {
         std::wcout << L"[*] Restoring original default Windows playback device..." << std::endl;

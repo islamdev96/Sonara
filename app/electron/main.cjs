@@ -208,10 +208,13 @@ function createWindow() {
   mainWindow.on('close', (e) => {
     if (!app.isQuiting) { e.preventDefault(); mainWindow.hide(); }
   });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
 function pushStatus() {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('engine-status', { installed: engineInstalled, active: engineActive });
   mainWindow.webContents.send('license-status', licensing.status());
 }
@@ -221,13 +224,13 @@ function createTray() {
   tray = new Tray(iconPath);
   tray.setToolTip('Sonara');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open', click: () => mainWindow.show() },
+    { label: 'Open', click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); } },
     { type: 'separator' },
     { label: 'Bypass (toggle)', click: () => { state.enabled = !state.enabled; publish(); } },
     { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuiting = true; app.quit(); } },
   ]));
-  tray.on('click', () => mainWindow.show());
+  tray.on('click', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); });
 }
 
 // =============================================================================
@@ -235,7 +238,7 @@ function createTray() {
 // =============================================================================
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
-  app.on('second-instance', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
+  app.on('second-instance', () => { if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); } });
   app.whenReady().then(() => {
     startHost();
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
@@ -243,7 +246,9 @@ else {
     publish();
     createWindow();
     createTray();
-    mainWindow.webContents.on('did-finish-load', pushStatus);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.on('did-finish-load', pushStatus);
+    }
 
     // Periodically poll engine status to detect when audiodg loads the APO
     setInterval(() => {
@@ -257,7 +262,7 @@ else {
 
     // Fast polling: push audio levels + raw samples to the renderer (~50ms) for VU meter and FFT visualizer.
     setInterval(() => {
-      if (!mainWindow || !engineActive) return;
+      if (!mainWindow || mainWindow.isDestroyed() || !engineActive) return;
       const status = statusBridge.readStatus();
       if (status && status.isAlive) {
         mainWindow.webContents.send('engine-levels', {
@@ -273,11 +278,11 @@ else {
       }
     }, 50);
 
-    globalShortcut.register('CommandOrControl+Alt+Up',   () => mainWindow.webContents.send('hotkey', 'up'));
-    globalShortcut.register('CommandOrControl+Alt+Down', () => mainWindow.webContents.send('hotkey', 'down'));
+    globalShortcut.register('CommandOrControl+Alt+Up',   () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('hotkey', 'up'); });
+    globalShortcut.register('CommandOrControl+Alt+Down', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('hotkey', 'down'); });
     globalShortcut.register('CommandOrControl+Alt+B',    () => { state.enabled = !state.enabled; publish(); });
 
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); else mainWindow.show(); });
+    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); else if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); });
   });
 }
 app.on('will-quit', () => {
@@ -307,7 +312,8 @@ ipcMain.on('set-params', (_e, partial) => {
 });
 
 ipcMain.handle('install-engine', async () => {
-  const res = dialog.showMessageBoxSync(mainWindow, {
+  const parentWin = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  const res = dialog.showMessageBoxSync(parentWin, {
     type: 'question', buttons: ['Install Engine', 'Cancel'], defaultId: 0,
     title: 'Install Sonara Engine',
     message: 'This installs the built-in audio engine (no third-party software). You will see a Windows admin prompt, and audio will briefly restart. Continue?',

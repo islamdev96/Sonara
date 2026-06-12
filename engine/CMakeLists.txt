@@ -70,6 +70,6 @@ add_executable(SonaraHost
 )
 target_include_directories(SonaraHost PRIVATE src)
 target_link_libraries(SonaraHost PRIVATE
-    ole32 oleaut32 uuid propsys Winmm
+    ole32 oleaut32 uuid propsys Winmm avrt
 )
 
