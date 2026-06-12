@@ -147,13 +147,21 @@ export default function App() {
 
     const fftMagnitudes = computeSpectrum(levels.rawSamples)
     setBars(prev => prev.map((h, i) => {
-      // Apply slight logarithmic scaling curve for better bin distribution
-      const ratio = Math.pow(i / 55, 1.4)
-      const binIdx = Math.min(127, Math.floor(ratio * 128))
+      const ratio = i / 55
+      
+      // Logarithmic bin mapping from bin 1 to bin 80 (covers up to ~15 kHz at 48kHz SR)
+      const minBin = 1
+      const maxBin = 80
+      const binIdx = Math.round(minBin * Math.pow(maxBin / minBin, ratio))
       const mag = fftMagnitudes[binIdx] || 0
       
+      // High-frequency pre-emphasis: scale the magnitude as a function of the bar index
+      // to make higher frequencies visually active.
+      const boost = 1.0 + Math.pow(ratio, 1.5) * 8.0
+      const boostedMag = mag * boost
+      
       // Convert linear magnitude to Decibels: db = 20 * log10(mag)
-      const db = 20 * Math.log10(mag + 0.0001)
+      const db = 20 * Math.log10(boostedMag + 0.0001)
       
       // Map -36 dB .. -3 dB to a 0..1 ratio
       const minDb = -36

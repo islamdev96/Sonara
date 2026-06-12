@@ -229,20 +229,23 @@ body {
 
 /* Visualizer */
 .visualizer-box {
-  height: 100px;
+  height: 60px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 2px;
+  gap: 2.5px;
   padding: 0 10px;
+  max-width: 320px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .viz-bar {
   flex: 1;
-  max-width: 10px;
-  min-width: 3px;
+  max-width: 4px;
+  min-width: 2.5px;
   background: var(--accent);
-  border-radius: 2px 2px 0 0;
+  border-radius: 1.5px 1.5px 0 0;
   transition: height 0.08s ease-out;
   min-height: 2px;
 }
