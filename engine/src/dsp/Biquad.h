@@ -86,6 +86,19 @@ public:
         a2 = (1.0 - alpha) / a0;
     }
 
+    void setHighPass(double sampleRate, double freq, double Q) noexcept {
+        const double w0 = 2.0 * WAB_PI * clampFreq(freq, sampleRate) / sampleRate;
+        const double cw = std::cos(w0);
+        const double sw = std::sin(w0);
+        const double alpha = sw / (2.0 * (Q <= 0.0001 ? 0.0001 : Q));
+        const double a0 = 1.0 + alpha;
+        b0 = ((1.0 + cw) / 2.0) / a0;
+        b1 = -(1.0 + cw) / a0;
+        b2 = ((1.0 + cw) / 2.0) / a0;
+        a1 = (-2.0 * cw) / a0;
+        a2 = (1.0 - alpha) / a0;
+    }
+
 private:
     static inline double clampFreq(double f, double sr) noexcept {
         const double nyq = sr * 0.49;

@@ -44,7 +44,8 @@ public:
     // Called from APOProcess() — must be RT-safe: no allocation, no blocking.
     // Only writes every `intervalCalls` invocations to avoid overhead.
     inline void write(float rmsL, float rmsR, float peakL, float peakR,
-                      uint32_t sampleRate, uint32_t channels) noexcept {
+                      uint32_t sampleRate, uint32_t channels,
+                      const char* activeDeviceName, const float* rawSamples) noexcept {
         if (!view_) return;
         // Atomic-ish write: bump seq, write fields, bump seq again.
         // The reader uses the same seqlock pattern to detect torn reads.
@@ -60,6 +61,22 @@ public:
         view_->sampleRate  = sampleRate;
         view_->channels    = channels;
         view_->magic       = kStatusMagic;
+
+        if (activeDeviceName) {
+            size_t i = 0;
+            for (; i < 127 && activeDeviceName[i] != '\0'; ++i) {
+                view_->activeDevice[i] = activeDeviceName[i];
+            }
+            view_->activeDevice[i] = '\0';
+        } else {
+            view_->activeDevice[0] = '\0';
+        }
+
+        if (rawSamples) {
+            for (size_t i = 0; i < 256; ++i) {
+                view_->rawSamples[i] = rawSamples[i];
+            }
+        }
 
         MemoryBarrier();
         view_->seq = s; // finalize

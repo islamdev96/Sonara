@@ -3,6 +3,7 @@ export {};
 type EngineParams = {
   boostPercent?: number;
   eqGainsDb?: number[];
+  eqBands?: { freq: number; q: number; gain: number; type: number }[];
   bass?: number; clarity?: number; ambience?: number; surround?: number; dynamic?: number;
   outputGainDb?: number; limiterOn?: boolean; limiterCeilingDb?: number;
   enabled?: boolean;
@@ -24,6 +25,8 @@ export type EngineLevels = {
   peakRight: number;
   sampleRate: number;
   channels: number;
+  activeDevice?: string;
+  rawSamples?: number[];
 };
 
 declare global {

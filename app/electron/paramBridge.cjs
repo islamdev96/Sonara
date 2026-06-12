@@ -8,8 +8,9 @@ const path = require('path');
 const os = require('os');
 
 const MAGIC = 0x57414250; // 'WABP'
-const VERSION = 2;
+const VERSION = 3;
 const NUM_EQ = 10;
+const kEqFrequencies = [31.5, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0];
 
 // %ProgramData%\WinAudioBoosterPro\params.bin
 const PARAMS_DIR = path.join(process.env.ProgramData || path.join(os.homedir(), 'AppData', 'Local'), 'WinAudioBoosterPro');
@@ -23,12 +24,12 @@ function ensureDir() {
 
 // Build the exact struct byte layout from Parameters.h.
 function serialize(p) {
-  // Compute total size: 3*u32 + i32 + 2*f32 + 10*f32 + 5*f32 + i32 + f32 + 8*u32
+  // Compute total size: 3*u32 + i32 + 2*f32 + NUM_EQ*16 + 5*f32 + i32 + f32 + 8*u32 = 244 bytes
   const buf = Buffer.alloc(
     4 + 4 + 4 +            // magic, version, seq
     4 +                    // enabled
     4 + 4 +                // preampDb, outputGainDb
-    NUM_EQ * 4 +           // eqGainsDb[10]
+    NUM_EQ * 16 +          // eqBands[10] (each is 16 bytes: 3*f32 + i32)
     5 * 4 +                // bass, clarity, ambience, surround, dynamic
     4 + 4 +                // limiterOn, limiterCeilingDb
     8 * 4                  // reserved[8]
@@ -40,7 +41,26 @@ function serialize(p) {
   buf.writeInt32LE(p.enabled ? 1 : 0, o); o += 4;
   buf.writeFloatLE(p.preampDb || 0, o); o += 4;
   buf.writeFloatLE(p.outputGainDb || 0, o); o += 4;
-  for (let i = 0; i < NUM_EQ; i++) { buf.writeFloatLE((p.eqGainsDb && p.eqGainsDb[i]) || 0, o); o += 4; }
+
+  // Map fallback from old eqGainsDb if new eqBands is not present
+  let eqBands = p.eqBands;
+  if (!eqBands && p.eqGainsDb) {
+    eqBands = p.eqGainsDb.map((g, i) => ({
+      freq: kEqFrequencies[i],
+      q: 1.4,
+      gain: g,
+      type: 0
+    }));
+  }
+
+  for (let i = 0; i < NUM_EQ; i++) {
+    const band = (eqBands && eqBands[i]) || { freq: kEqFrequencies[i], q: 1.4, gain: 0, type: 0 };
+    buf.writeFloatLE(band.freq || kEqFrequencies[i], o); o += 4;
+    buf.writeFloatLE(typeof band.q === 'number' ? band.q : 1.4, o); o += 4;
+    buf.writeFloatLE(band.gain || 0, o); o += 4;
+    buf.writeInt32LE(typeof band.type === 'number' ? band.type : 0, o); o += 4;
+  }
+
   buf.writeFloatLE(p.bass || 0, o); o += 4;
   buf.writeFloatLE(p.clarity || 0, o); o += 4;
   buf.writeFloatLE(p.ambience || 0, o); o += 4;

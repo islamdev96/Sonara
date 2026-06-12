@@ -16,7 +16,7 @@ const STATUS_FILE = path.join(STATUS_DIR, 'status.bin');
 
 // Parse the StatusBlock struct from a Buffer.
 function parseStatus(buf) {
-  if (!buf || buf.length < 56) return null;
+  if (!buf || buf.length < 1216) return null;
   const magic = buf.readUInt32LE(0);
   if (magic !== STATUS_MAGIC) return null;
 
@@ -35,7 +35,21 @@ function parseStatus(buf) {
   const sampleRate   = buf.readUInt32LE(32);
   const channels     = buf.readUInt32LE(36);
 
-  return { seq, heartbeatMs, rmsLeft, rmsRight, peakLeft, peakRight, sampleRate, channels };
+  // Parse activeDevice (offset 40, 128 bytes)
+  let activeDevice = buf.toString('utf8', 40, 40 + 128);
+  const nullIdx = activeDevice.indexOf('\0');
+  if (nullIdx !== -1) {
+    activeDevice = activeDevice.substring(0, nullIdx);
+  }
+  activeDevice = activeDevice.trim();
+
+  // Parse rawSamples (offset 168, 256 floats)
+  const rawSamples = [];
+  for (let i = 0; i < 256; i++) {
+    rawSamples.push(buf.readFloatLE(168 + i * 4));
+  }
+
+  return { seq, heartbeatMs, rmsLeft, rmsRight, peakLeft, peakRight, sampleRate, channels, activeDevice, rawSamples };
 }
 
 // Read and return the current status, or null if the file doesn't exist or is stale.

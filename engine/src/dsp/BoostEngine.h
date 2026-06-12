@@ -130,16 +130,33 @@ private:
         outGainTarget_ = dbToLin(p.outputGainDb);
         if (force) { preampLin_ = preampTarget_; outGainLin_ = outGainTarget_; }
 
-        // 10-band parametric EQ (Q ~ 1.4 for musical overlap). A band left flat
-        // (~0 dB) is an identity filter, so we skip it entirely on the audio
-        // path instead of running a no-op biquad for every sample.
+        // 10-band parametric EQ. A band left flat (~0 dB for peaking/shelving)
+        // is an identity filter, so we skip it entirely on the audio path.
         nActiveEq_ = 0;
         for (int b = 0; b < kNumEqBands; ++b) {
-            if (std::fabs(p.eqGainsDb[b]) > 0.01f) {
+            const auto& band = p.eqBands[b];
+            // LowPass (3) and HighPass (4) are always active.
+            // Peaking (0), LowShelf (1), and HighShelf (2) are active if gain is non-zero.
+            const bool isFilterActive = (band.type >= 3) || (std::fabs(band.gain) > 0.01f);
+
+            if (isFilterActive && band.freq > 10.0f) {
                 activeEq_[nActiveEq_++] = b;
-                for (int c = 0; c < ch_; ++c)
-                    eq_[static_cast<size_t>(c) * kNumEqBands + b]
-                        .setPeaking(sr_, kEqFrequencies[b], 1.4, p.eqGainsDb[b]);
+                for (int c = 0; c < ch_; ++c) {
+                    auto& bq = eq_[static_cast<size_t>(c) * kNumEqBands + b];
+                    if (band.type == 0) {
+                        bq.setPeaking(sr_, band.freq, band.q, band.gain);
+                    } else if (band.type == 1) {
+                        bq.setLowShelf(sr_, band.freq, band.q, band.gain);
+                    } else if (band.type == 2) {
+                        bq.setHighShelf(sr_, band.freq, band.q, band.gain);
+                    } else if (band.type == 3) {
+                        bq.setLowPass(sr_, band.freq, band.q);
+                    } else if (band.type == 4) {
+                        bq.setHighPass(sr_, band.freq, band.q);
+                    } else {
+                        bq.setPeaking(sr_, band.freq, band.q, band.gain);
+                    }
+                }
             } else {
                 for (int c = 0; c < ch_; ++c)
                     eq_[static_cast<size_t>(c) * kNumEqBands + b].reset();

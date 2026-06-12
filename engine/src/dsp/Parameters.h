@@ -11,7 +11,7 @@ namespace wab::dsp {
 
 static constexpr int    kNumEqBands   = 10;
 static constexpr uint32_t kParamMagic = 0x57414250; // 'WABP'
-static constexpr uint32_t kParamVersion = 2;
+static constexpr uint32_t kParamVersion = 3;
 
 // Center frequencies (Hz) for the 10-band EQ. Matches the UI sliders.
 static constexpr double kEqFrequencies[kNumEqBands] = {
@@ -19,6 +19,13 @@ static constexpr double kEqFrequencies[kNumEqBands] = {
 };
 
 #pragma pack(push, 4)
+struct EqBandParameters {
+    float freq = 0.0f;
+    float q = 1.4f;
+    float gain = 0.0f;
+    int32_t type = 0; // 0 = Peaking, 1 = LowShelf, 2 = HighShelf, 3 = LowPass, 4 = HighPass
+};
+
 struct Parameters {
     uint32_t magic   = kParamMagic;   // sanity check for shared memory
     uint32_t version = kParamVersion; // layout version
@@ -28,7 +35,7 @@ struct Parameters {
     float    preampDb    = 0.0f;      // master make-up / boost in dB (the "booster")
     float    outputGainDb = 0.0f;     // final trim after limiter
 
-    float    eqGainsDb[kNumEqBands] = {0,0,0,0,0,0,0,0,0,0}; // per-band gain in dB
+    EqBandParameters eqBands[kNumEqBands] = {}; // 10 parametric EQ bands
 
     float    bass        = 0.0f;      // 0..1 -> low-shelf bass boost amount
     float    clarity     = 0.0f;      // 0..1 -> presence high-shelf

@@ -359,6 +359,7 @@ int main(int argc, char* argv[]) {
     float peakLAcc = 0.0f;
     float peakRAcc = 0.0f;
     uint32_t frameCountAcc = 0;
+    float rawSamplesAcc[256] = {0};
     bool isFloatCapture = IsIeeeFloat(pwfxCapture);
     bool isFloatRender = IsIeeeFloat(pwfxRender);
 
@@ -405,6 +406,21 @@ int main(int argc, char* argv[]) {
 
                 // 2. Process through DSP
                 dspEngine.process(processBuf.data(), numFramesRead);
+
+                // Save latest raw samples for FFT visualizer
+                {
+                    int copyCount = std::min(256, (int)numFramesRead);
+                    for (int i = 0; i < 256; ++i) {
+                        if (i < copyCount) {
+                            int frameIdx = (int)numFramesRead - copyCount + i;
+                            if (channels >= 2) {
+                                rawSamplesAcc[i] = (processBuf[frameIdx * channels] + processBuf[frameIdx * channels + 1]) * 0.5f;
+                            } else {
+                                rawSamplesAcc[i] = processBuf[frameIdx * channels];
+                            }
+                        }
+                    }
+                }
 
                 // 3. Accumulate live levels for status.bin
                 for (UINT32 f = 0; f < numFramesRead; ++f) {
@@ -454,7 +470,24 @@ int main(int argc, char* argv[]) {
                 peakL = peakLAcc;
                 peakR = peakRAcc;
             }
-            statusWriter.write(rmsL, rmsR, peakL, peakR, pwfxCapture->nSamplesPerSec, pwfxCapture->nChannels);
+
+            char activeDevice[128] = {0};
+            IMMDevice* pCurrentDefault = nullptr;
+            if (SUCCEEDED(pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pCurrentDefault)) && pCurrentDefault) {
+                IPropertyStore* pProps = nullptr;
+                if (SUCCEEDED(pCurrentDefault->OpenPropertyStore(STGM_READ, &pProps)) && pProps) {
+                    PROPVARIANT varName;
+                    PropVariantInit(&varName);
+                    if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName)) && varName.pwszVal) {
+                        WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1, activeDevice, sizeof(activeDevice), nullptr, nullptr);
+                    }
+                    PropVariantClear(&varName);
+                    pProps->Release();
+                }
+                pCurrentDefault->Release();
+            }
+
+            statusWriter.write(rmsL, rmsR, peakL, peakR, pwfxCapture->nSamplesPerSec, pwfxCapture->nChannels, activeDevice, rawSamplesAcc);
 
             // Reset accumulators
             sumSqLAcc = 0.0;

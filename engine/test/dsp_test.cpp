@@ -57,7 +57,12 @@ int main() {
         BoostEngine eng; eng.prepare(sr, ch);
         Parameters p; p.seq = 2; p.preampDb = 12.0f; p.bass = 1.0f; p.clarity = 1.0f;
         p.dynamic = 1.0f; p.surround = 1.0f; p.ambience = 1.0f;
-        for (int b = 0; b < kNumEqBands; ++b) p.eqGainsDb[b] = (b % 2 ? 6.0f : -4.0f);
+        for (int b = 0; b < kNumEqBands; ++b) {
+            p.eqBands[b].freq = kEqFrequencies[b];
+            p.eqBands[b].q = 1.4f;
+            p.eqBands[b].gain = (b % 2 ? 6.0f : -4.0f);
+            p.eqBands[b].type = 0; // Peaking
+        }
         eng.updateParameters(p);
         std::mt19937 rng(1234); std::uniform_real_distribution<float> d(-0.7f, 0.7f);
         std::vector<float> buf((size_t)frames * ch); for (auto& x : buf) x = d(rng);

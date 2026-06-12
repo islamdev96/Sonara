@@ -24,6 +24,8 @@ struct StatusBlock {
     float    peakRight    = 0.0f;
     uint32_t sampleRate   = 0;            // negotiated sample rate
     uint32_t channels     = 0;            // negotiated channel count
+    char     activeDevice[128] = {};      // active default playback device friendly name (UTF-8)
+    float    rawSamples[256] = {};        // latest 256 contiguous audio samples (mono/left)
     uint32_t reserved[6]  = {};           // future use, keeps ABI stable
 };
 #pragma pack(pop)

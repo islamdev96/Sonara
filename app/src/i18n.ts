@@ -15,6 +15,7 @@ export const i18n = {
     install: 'Install Engine', enterName: 'Preset name', save: 'Save', cancel: 'Cancel', confirmDel: 'Delete this preset?', delete: 'Delete',
     trial: (d: number) => `Pro trial — ${d} day${d === 1 ? '' : 's'} left`, free: 'Free — upgrade for boost above 100%', pro: 'Pro — activated', launchFree: 'Free — full version (launch offer)',
     buy: 'Upgrade', activate: 'Activate', licenseKey: 'Paste license key', activated: 'Activated!', badKey: 'Invalid key',
+    eqModeGraphic: 'Graphic EQ', eqModeParametric: 'Parametric EQ', freq: 'Freq', qFactor: 'Q', filterType: 'Type',
   },
   ar: {
     title: 'سونارا', settings: 'الإعدادات', lang: 'English', autoStart: 'التشغيل مع الويندوز',
@@ -28,6 +29,7 @@ export const i18n = {
     install: 'تثبيت المحرك', enterName: 'اسم الإعداد', save: 'حفظ', cancel: 'إلغاء', confirmDel: 'حذف هذا الإعداد؟', delete: 'حذف',
     trial: (d: number) => `نسخة Pro تجريبية — باقٍ ${d} يوم`, free: 'مجاني — قم بالترقية للتضخيم فوق 100%', pro: 'Pro — مُفعّل', launchFree: 'مجاني بالكامل — عرض الإطلاق',
     buy: 'ترقية', activate: 'تفعيل', licenseKey: 'الصق مفتاح الترخيص', activated: 'تم التفعيل!', badKey: 'مفتاح غير صالح',
+    eqModeGraphic: 'معادل رسومي', eqModeParametric: 'معادل بارامتري', freq: 'التردد', qFactor: 'معامل Q', filterType: 'النوع',
   },
 }
 

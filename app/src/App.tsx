@@ -10,8 +10,11 @@ import Header from './components/Header'
 import EngineBar from './components/EngineBar'
 import TopBar from './components/TopBar'
 import ControlSidebar from './components/ControlSidebar'
-import Equalizer from './components/Equalizer'
+import Equalizer, { type ParametricBand } from './components/Equalizer'
 import Modals from './components/Modals'
+import { computeSpectrum } from './fft'
+
+const kEqFrequencies = [31.5, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0]
 
 export default function App() {
   const [lang, setLang] = useLocalStorage<Lang>('lang', 'en')
@@ -35,11 +38,91 @@ export default function App() {
   const [bass, setBass] = useState(85)
   const [limiter, setLimiter] = useState(true)
 
+  // Parametric EQ state
+  const [eqMode, setEqMode] = useLocalStorage<'graphic' | 'parametric'>('eqMode', 'graphic')
+  const [parametricBands, setParametricBands] = useLocalStorage<ParametricBand[]>('parametricBands',
+    kEqFrequencies.map(f => ({ freq: f, q: 1.4, gain: 0, type: 0 }))
+  )
+
+  // Per-Device Profiles
+  const [deviceProfiles, setDeviceProfiles] = useLocalStorage<Record<string, {
+    boost: number
+    eqMode: 'graphic' | 'parametric'
+    eq: number[]
+    parametricBands: ParametricBand[]
+    bass: number
+    clarity: number
+    ambience: number
+    surround: number
+    dynamic: number
+    limiter: boolean
+  }>>('deviceProfiles', {})
+
+  const lastActiveDeviceRef = useRef<string | null>(null)
+
+  // Load profile when the active device changes
+  useEffect(() => {
+    const activeDevice = levels.activeDevice || 'System Default Output'
+    if (activeDevice === lastActiveDeviceRef.current) return
+    lastActiveDeviceRef.current = activeDevice
+
+    const profile = deviceProfiles[activeDevice]
+    if (profile) {
+      setBoost(profile.boost)
+      setEqMode(profile.eqMode)
+      setEq(profile.eq)
+      setParametricBands(profile.parametricBands)
+      setBass(profile.bass)
+      setClarity(profile.clarity)
+      setAmbience(profile.ambience)
+      setSurround(profile.surround)
+      setDynamic(profile.dynamic)
+      setLimiter(profile.limiter)
+    } else {
+      // Create initial profile for new device
+      setDeviceProfiles(prev => ({
+        ...prev,
+        [activeDevice]: {
+          boost,
+          eqMode,
+          eq,
+          parametricBands,
+          bass,
+          clarity,
+          ambience,
+          surround,
+          dynamic,
+          limiter
+        }
+      }))
+    }
+  }, [levels.activeDevice])
+
+  // Save changes to current active device's profile
+  useEffect(() => {
+    const activeDevice = levels.activeDevice || 'System Default Output'
+    setDeviceProfiles(prev => ({
+      ...prev,
+      [activeDevice]: {
+        boost,
+        eqMode,
+        eq,
+        parametricBands,
+        bass,
+        clarity,
+        ambience,
+        surround,
+        dynamic,
+        limiter
+      }
+    }))
+  }, [boost, eqMode, eq, parametricBands, bass, clarity, ambience, surround, dynamic, limiter, levels.activeDevice])
+
   // Preset storage + selection (custom presets persisted to localStorage).
   const { current, setCurrent, allPresets, isDefaultPreset, saveCustom, overwriteCurrent, deleteCurrent } = usePresets()
   const [modal, setModal] = useState<'save'|'delete'|'license'|null>(null)
   const [newName, setNewName] = useState('')
-  const [bars, setBars] = useState<number[]>(Array(56).fill(5))
+  const [bars, setBars] = useState<number[]>(Array(56).fill(3))
 
   const maxBoost = license.maxBoostPercent
   const isPro = license.tier === 'pro'
@@ -53,47 +136,64 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ===== visualizer =====
-  const rmsRef = useRef(0)
+  // ===== real FFT visualizer =====
   useEffect(() => {
-    rmsRef.current = isOn ? Math.max(levels.rmsLeft, levels.rmsRight) : 0
-  }, [levels, isOn])
+    if (!isOn || !levels.rawSamples || levels.rawSamples.length === 0) {
+      const iv = setInterval(() => {
+        setBars(prev => prev.map(h => Math.max(3, h * 0.85)))
+      }, 50)
+      return () => clearInterval(iv)
+    }
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const currentRms = rmsRef.current
-      setBars(prev => prev.map((h, i) => {
-        if (!isOn || currentRms < 0.001) {
-          return Math.max(3, h * 0.78)
-        }
-        const decayed = h * 0.78
-        const freqFactor = Math.sin((i / 55) * Math.PI) * 0.8 + 0.2
-        const bandMod = (Math.sin(i * 0.4) + Math.cos(i * 0.7)) * 0.25 + 0.75
-        const targetHeight = freqFactor * bandMod * 65
-        const rmsScale = Math.min(1.0, currentRms * 5.0)
-        const jitter = Math.random() * 10
-        const activeHeight = targetHeight * rmsScale + jitter
-        return Math.max(3, Math.max(decayed, activeHeight))
-      }))
-    }, 60)
-    return () => clearInterval(iv)
-  }, [isOn])
+    const fftMagnitudes = computeSpectrum(levels.rawSamples)
+    setBars(prev => prev.map((h, i) => {
+      // Apply slight logarithmic scaling curve for better bin distribution
+      const ratio = Math.pow(i / 55, 1.4)
+      const binIdx = Math.min(127, Math.floor(ratio * 128))
+      const mag = fftMagnitudes[binIdx] || 0
+      
+      // Convert linear magnitude to Decibels: db = 20 * log10(mag)
+      const db = 20 * Math.log10(mag + 0.0001)
+      
+      // Map -36 dB .. -3 dB to a 0..1 ratio
+      const minDb = -36
+      const maxDb = -3
+      const dbRatio = Math.max(0, Math.min(1, (db - minDb) / (maxDb - minDb)))
+      
+      // Target height in percentage (3% to 95%)
+      const targetHeight = 3 + dbRatio * 92
+      
+      // Interpolate with historical value for smoother animations (rise fast, decay slow)
+      const smoothFactor = targetHeight > h ? 0.65 : 0.25
+      return h * (1 - smoothFactor) + targetHeight * smoothFactor
+    }))
+  }, [levels.rawSamples, isOn])
 
   // ===== push params to the self-contained engine (debounced) =====
   const sendRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => {
     clearTimeout(sendRef.current)
     sendRef.current = setTimeout(() => {
+      // Map current EQ state to parametric bands if in graphic mode
+      const bandsToSend = eqMode === 'graphic'
+        ? eq.map((gainPos, i) => ({
+            freq: kEqFrequencies[i],
+            q: 1.4,
+            gain: posToDb(gainPos),
+            type: 0 // Peaking
+          }))
+        : parametricBands
+
       window.api?.setParams({
         enabled: isOn,
         boostPercent: Math.min(maxBoost, boost),
-        eqGainsDb: eq.map(posToDb),
+        eqBands: bandsToSend,
         bass: norm(bass), clarity: norm(clarity), ambience: norm(ambience),
         surround: norm(surround), dynamic: norm(dynamic),
         limiterOn: limiter,
       })
     }, 120)
-  }, [isOn, boost, eq, bass, clarity, ambience, surround, dynamic, limiter, maxBoost])
+  }, [isOn, boost, eq, eqMode, parametricBands, bass, clarity, ambience, surround, dynamic, limiter, maxBoost])
 
   // Sync autostart to the OS (persistence handled by useLocalStorage).
   useEffect(() => { window.api?.toggleAutostart(autoStart) }, [autoStart])
@@ -103,6 +203,7 @@ export default function App() {
     setCurrent(name); const p = allPresets[name]; if (!p) return
     setEq([...p.eq]); setBoost(Math.min(maxBoost, p.boost)); setClarity(p.clarity)
     setAmbience(p.ambience); setSurround(p.surround ?? 0); setDynamic(p.dynamic); setBass(p.bass)
+    setEqMode('graphic') // presets default to graphic mode
   }
   const snapshot = (): Preset => ({ eq, boost, clarity, ambience, surround, dynamic, bass })
   const savePreset = () => {
@@ -139,7 +240,7 @@ export default function App() {
 
       <EngineBar t={t} engineInstalled={engineInstalled} engineActive={engineActive} onInstall={() => window.api?.installEngine()} />
 
-      <TopBar t={t} current={current} presetNames={Object.keys(allPresets)} onSelect={loadPreset} bars={bars} isOn={isOn} />
+      <TopBar t={t} current={current} presetNames={Object.keys(allPresets)} onSelect={loadPreset} bars={bars} isOn={isOn} activeDevice={levels.activeDevice} />
 
       <div className="main-content">
         <ControlSidebar
@@ -151,7 +252,12 @@ export default function App() {
           surround={surround} setSurround={setSurround}
           ambience={ambience} setAmbience={setAmbience}
         />
-        <Equalizer eq={eq} setEq={setEq} isOn={isOn} />
+        <Equalizer 
+          eq={eq} setEq={setEq} isOn={isOn} 
+          eqMode={eqMode} setEqMode={setEqMode}
+          parametricBands={parametricBands} setParametricBands={setParametricBands}
+          t={t}
+        />
       </div>
 
       <Modals

@@ -255,7 +255,7 @@ else {
       }
     }, 3000);
 
-    // Fast polling: push audio levels to the renderer for the VU meter (~200ms).
+    // Fast polling: push audio levels + raw samples to the renderer (~50ms) for VU meter and FFT visualizer.
     setInterval(() => {
       if (!mainWindow || !engineActive) return;
       const status = statusBridge.readStatus();
@@ -267,9 +267,11 @@ else {
           peakRight: status.peakRight,
           sampleRate: status.sampleRate,
           channels: status.channels,
+          activeDevice: status.activeDevice,
+          rawSamples: status.rawSamples,
         });
       }
-    }, 200);
+    }, 50);
 
     globalShortcut.register('CommandOrControl+Alt+Up',   () => mainWindow.webContents.send('hotkey', 'up'));
     globalShortcut.register('CommandOrControl+Alt+Down', () => mainWindow.webContents.send('hotkey', 'down'));

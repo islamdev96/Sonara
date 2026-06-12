@@ -6,6 +6,9 @@
 #include <cstring>
 #include <cmath>
 
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
+
 extern LONG g_cDllRef;
 // Registration properties advertised to the audio engine.
 static const CRegAPOProperties<1> g_RegProps(
@@ -16,6 +19,34 @@ static const CRegAPOProperties<1> g_RegProps(
     __uuidof(IAudioProcessingObject),
     APO_FLAG_DEFAULT
 );
+
+// Static helper to query default device friendly name.
+static void GetDefaultPlaybackDeviceName(char* outName, size_t maxLen) {
+    outName[0] = '\0';
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    if (FAILED(hr)) return;
+
+    IMMDevice* pDevice = nullptr;
+    hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+    if (SUCCEEDED(hr)) {
+        IPropertyStore* pProps = nullptr;
+        hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
+        if (SUCCEEDED(hr) && pProps) {
+            PROPVARIANT varName;
+            PropVariantInit(&varName);
+            hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
+            if (SUCCEEDED(hr) && varName.pwszVal) {
+                // Convert wide string to UTF-8
+                WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1, outName, (int)maxLen, nullptr, nullptr);
+            }
+            PropVariantClear(&varName);
+            pProps->Release();
+        }
+        pDevice->Release();
+    }
+    pEnumerator->Release();
+}
 
 CBoosterAPO::CBoosterAPO() : CBaseAudioProcessingObject(g_RegProps) {
     InterlockedIncrement(&g_cDllRef);
@@ -207,12 +238,32 @@ STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPER
             if (pkR > m_peakR) m_peakR = pkR;
         }
 
-        // Write status (heartbeat + levels) every 10 callbacks (~100 ms).
-        if (++m_statusCounter >= 10) {
+        // Write status (heartbeat + levels + active device + raw samples) every 5 callbacks (~50 ms).
+        if (++m_statusCounter >= 5) {
             const float rmsL = std::sqrt(m_rmsAccL / m_statusCounter);
             const float rmsR = std::sqrt(m_rmsAccR / m_statusCounter);
+
+            // Extract latest 256 contiguous processed samples
+            float rawSamples[256] = {0};
+            int copyCount = std::min(256, (int)frames);
+            const UINT32 ch = m_channels;
+            for (int i = 0; i < 256; ++i) {
+                if (i < copyCount) {
+                    int frameIdx = (int)frames - copyCount + i;
+                    if (ch >= 2) {
+                        rawSamples[i] = (pOut[frameIdx * ch] + pOut[frameIdx * ch + 1]) * 0.5f;
+                    } else {
+                        rawSamples[i] = pOut[frameIdx * ch];
+                    }
+                }
+            }
+
+            char activeDevice[128] = {0};
+            GetDefaultPlaybackDeviceName(activeDevice, sizeof(activeDevice));
+
             m_status.write(rmsL, rmsR, m_peakL, m_peakR,
-                           static_cast<uint32_t>(m_sampleRate), m_channels);
+                           static_cast<uint32_t>(m_sampleRate), m_channels,
+                           activeDevice, rawSamples);
             m_rmsAccL = m_rmsAccR = 0.0f;
             m_peakL = m_peakR = 0.0f;
             m_statusCounter = 0;
