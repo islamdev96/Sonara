@@ -244,10 +244,10 @@ body {
   flex: 1;
   max-width: 4px;
   min-width: 2.5px;
-  background: var(--accent);
+  background: linear-gradient(to top, #7c3aed, var(--accent));
   border-radius: 1.5px 1.5px 0 0;
-  transition: height 0.08s ease-out;
   min-height: 2px;
+  box-shadow: 0 0 6px rgba(240, 48, 72, 0.15);
 }
 
 /* =================== MAIN CONTENT (Sidebar + EQ) =================== */

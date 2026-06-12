@@ -123,6 +123,11 @@ export default function App() {
   const [modal, setModal] = useState<'save'|'delete'|'license'|null>(null)
   const [newName, setNewName] = useState('')
   const [bars, setBars] = useState<number[]>(Array(56).fill(3))
+  
+  // Refs to manage 60FPS fluid physics visualizer
+  const latestFftRef = useRef<Float32Array | null>(null)
+  const heightsRef = useRef<number[]>(Array(56).fill(3))
+  const velocitiesRef = useRef<number[]>(Array(56).fill(0))
 
   const maxBoost = license.maxBoostPercent
   const isPro = license.tier === 'pro'
@@ -137,45 +142,78 @@ export default function App() {
   }, [])
 
   // ===== real FFT visualizer =====
+  // 1. Instantly update the current FFT sample ref when new audio levels arrive from the engine (20 FPS)
   useEffect(() => {
-    if (!isOn || !levels.rawSamples || levels.rawSamples.length === 0) {
-      const iv = setInterval(() => {
-        setBars(prev => prev.map(h => Math.max(3, h * 0.85)))
-      }, 50)
-      return () => clearInterval(iv)
+    if (isOn && levels.rawSamples && levels.rawSamples.length > 0) {
+      latestFftRef.current = computeSpectrum(levels.rawSamples)
+    } else {
+      latestFftRef.current = null
     }
-
-    const fftMagnitudes = computeSpectrum(levels.rawSamples)
-    setBars(prev => prev.map((h, i) => {
-      const ratio = i / 55
-      
-      // Logarithmic bin mapping from bin 1 to bin 80 (covers up to ~15 kHz at 48kHz SR)
-      const minBin = 1
-      const maxBin = 80
-      const binIdx = Math.round(minBin * Math.pow(maxBin / minBin, ratio))
-      const mag = fftMagnitudes[binIdx] || 0
-      
-      // High-frequency pre-emphasis: scale the magnitude as a function of the bar index
-      // to make higher frequencies visually active.
-      const boost = 1.0 + Math.pow(ratio, 1.5) * 8.0
-      const boostedMag = mag * boost
-      
-      // Convert linear magnitude to Decibels: db = 20 * log10(mag)
-      const db = 20 * Math.log10(boostedMag + 0.0001)
-      
-      // Map -36 dB .. -3 dB to a 0..1 ratio
-      const minDb = -36
-      const maxDb = -3
-      const dbRatio = Math.max(0, Math.min(1, (db - minDb) / (maxDb - minDb)))
-      
-      // Target height in percentage (3% to 95%)
-      const targetHeight = 3 + dbRatio * 92
-      
-      // Interpolate with historical value for smoother animations (rise fast, decay slow)
-      const smoothFactor = targetHeight > h ? 0.65 : 0.25
-      return h * (1 - smoothFactor) + targetHeight * smoothFactor
-    }))
   }, [levels.rawSamples, isOn])
+
+  // 2. High-performance requestAnimationFrame loop running at native screen refresh rate (60FPS+)
+  // driving fluid spring-damper physics for all 56 bars.
+  useEffect(() => {
+    let animId: number
+    
+    const updatePhysics = () => {
+      const fftMagnitudes = latestFftRef.current
+      
+      const newHeights = heightsRef.current.map((h, i) => {
+        let targetHeight = 3
+        if (isOn && fftMagnitudes) {
+          const ratio = i / 55
+          
+          // Logarithmic bin mapping from bin 1 to bin 80 (covers up to ~15 kHz at 48kHz SR)
+          const minBin = 1
+          const maxBin = 80
+          const binIdx = Math.round(minBin * Math.pow(maxBin / minBin, ratio))
+          const mag = fftMagnitudes[binIdx] || 0
+          
+          // High-frequency pre-emphasis: scale the magnitude as a function of the bar index
+          // to make higher frequencies visually active.
+          const boost = 1.0 + Math.pow(ratio, 1.5) * 8.0
+          const boostedMag = mag * boost
+          
+          // Convert linear magnitude to Decibels
+          const db = 20 * Math.log10(boostedMag + 0.0001)
+          const minDb = -36
+          const maxDb = -3
+          const dbRatio = Math.max(0, Math.min(1, (db - minDb) / (maxDb - minDb)))
+          
+          targetHeight = 3 + dbRatio * 92
+        }
+        
+        // Spring physics parameters (tuned for 60fps refresh rate)
+        const stiffness = 0.28 // speed of acceleration towards target
+        const damping = 0.58   // bounciness friction (lower = more bounce, higher = more sluggish)
+        
+        const force = (targetHeight - h) * stiffness
+        let velocity = velocitiesRef.current[i] + force
+        velocity *= damping
+        velocitiesRef.current[i] = velocity
+        
+        let newH = h + velocity
+        // Clamp heights to avoid rendering overflows and clean bottom state
+        if (newH < 3) {
+          newH = 3
+          velocitiesRef.current[i] = 0
+        } else if (newH > 95) {
+          newH = 95
+          velocitiesRef.current[i] = 0
+        }
+        return newH
+      })
+      
+      heightsRef.current = newHeights
+      setBars(newHeights)
+      
+      animId = requestAnimationFrame(updatePhysics)
+    }
+    
+    animId = requestAnimationFrame(updatePhysics)
+    return () => cancelAnimationFrame(animId)
+  }, [isOn])
 
   // ===== push params to the self-contained engine (debounced) =====
   const sendRef = useRef<ReturnType<typeof setTimeout>>(undefined)
