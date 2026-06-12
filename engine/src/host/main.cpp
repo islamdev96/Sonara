@@ -362,6 +362,7 @@ int main(int argc, char* argv[]) {
     float rawSamplesAcc[256] = {0};
     bool isFloatCapture = IsIeeeFloat(pwfxCapture);
     bool isFloatRender = IsIeeeFloat(pwfxRender);
+    std::vector<float> fifoBuffer;
 
     while (true) {
         // Read updated parameters from UI
@@ -433,28 +434,55 @@ int main(int argc, char* argv[]) {
                 }
                 frameCountAcc += numFramesRead;
 
-                // 4. Output to physical Speakers
-                BYTE* pRenderData = nullptr;
-                hr = pRenderClientService->GetBuffer(numFramesRead, &pRenderData);
-                if (SUCCEEDED(hr) && pRenderData) {
-                    if (isFloatRender) {
-                        std::memcpy(pRenderData, processBuf.data(), processBuf.size() * sizeof(float));
-                    } else {
-                        // Convert float back to 16-bit PCM
-                        short* pRenderShort = reinterpret_cast<short*>(pRenderData);
-                        for (size_t i = 0; i < processBuf.size(); ++i) {
-                            float val = processBuf[i] * 32767.0f;
-                            pRenderShort[i] = static_cast<short>(std::clamp(val, -32768.0f, 32767.0f));
-                        }
-                    }
-                    pRenderClientService->ReleaseBuffer(numFramesRead, 0);
-                }
+                // Push processed samples to FIFO buffer
+                fifoBuffer.insert(fifoBuffer.end(), processBuf.begin(), processBuf.end());
             }
 
             pCaptureClientService->ReleaseBuffer(numFramesRead);
 
             hr = pCaptureClientService->GetNextPacketSize(&nextPacketSize);
             if (FAILED(hr)) break;
+        }
+
+        // 4. Output as much as possible from FIFO to physical Speakers
+        int renderChannels = pwfxRender->nChannels;
+        UINT32 fifoFrames = (UINT32)(fifoBuffer.size() / renderChannels);
+
+        // Drift protection: if FIFO accumulates too much lag (e.g. > 80ms), trim it back to 20ms
+        UINT32 maxFifoFrames = (pwfxCapture->nSamplesPerSec * 80) / 1000;
+        if (fifoFrames > maxFifoFrames) {
+            UINT32 targetFifoFrames = (pwfxCapture->nSamplesPerSec * 20) / 1000;
+            size_t dropSamples = (fifoFrames - targetFifoFrames) * renderChannels;
+            if (fifoBuffer.size() > dropSamples) {
+                fifoBuffer.erase(fifoBuffer.begin(), fifoBuffer.begin() + dropSamples);
+            }
+            fifoFrames = (UINT32)(fifoBuffer.size() / renderChannels);
+        }
+
+        UINT32 numPaddingFrames = 0;
+        hr = pRenderClient->GetCurrentPadding(&numPaddingFrames);
+        if (SUCCEEDED(hr)) {
+            UINT32 numFreeFrames = renderBufferSize - numPaddingFrames;
+            UINT32 framesToWrite = std::min(numFreeFrames, fifoFrames);
+            if (framesToWrite > 0) {
+                BYTE* pRenderData = nullptr;
+                hr = pRenderClientService->GetBuffer(framesToWrite, &pRenderData);
+                if (SUCCEEDED(hr) && pRenderData) {
+                    size_t samplesToWrite = framesToWrite * renderChannels;
+                    if (isFloatRender) {
+                        std::memcpy(pRenderData, fifoBuffer.data(), samplesToWrite * sizeof(float));
+                    } else {
+                        // Convert float back to 16-bit PCM
+                        short* pRenderShort = reinterpret_cast<short*>(pRenderData);
+                        for (size_t i = 0; i < samplesToWrite; ++i) {
+                            float val = fifoBuffer[i] * 32767.0f;
+                            pRenderShort[i] = static_cast<short>(std::clamp(val, -32768.0f, 32767.0f));
+                        }
+                    }
+                    pRenderClientService->ReleaseBuffer(framesToWrite, 0);
+                    fifoBuffer.erase(fifoBuffer.begin(), fifoBuffer.begin() + samplesToWrite);
+                }
+            }
         }
 
         // 5. Periodic status write (every 100ms)
@@ -498,8 +526,8 @@ int main(int argc, char* argv[]) {
             lastStatusWriteTicks = nowTicks;
         }
 
-        // 2ms sleep to avoid pinning the CPU (avoids 100% core load)
-        Sleep(2);
+        // 1ms sleep to avoid pinning the CPU (avoids 100% core load)
+        Sleep(1);
     }
 
     timeEndPeriod(1);
