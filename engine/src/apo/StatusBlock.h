@@ -3,7 +3,7 @@
 // This proves the engine is actually loaded and processing audio, replacing
 // the unreliable tasklist-based detection. Also enables a real VU meter.
 //
-// File:  %ProgramData%\WinAudioBoosterPro\status.bin
+// File:  %ProgramData%\Sonara\status.bin
 // Write: APO (inside audiodg.exe) — every ~100ms during APOProcess()
 // Read:  Electron main process — every ~200ms via statusBridge.cjs
 #pragma once

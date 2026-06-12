@@ -60,7 +60,7 @@ Get-ChildItem $base | ForEach-Object {
   }
 }
 
-$dest = Join-Path $env:WINDIR 'System32\BoosterAPO.dll'
+$dest = Join-Path $env:WINDIR 'System32\SonaraAPO.dll'
 if (Test-Path $dest) {
   & regsvr32.exe /u /s $dest
   Restart-Service -Name Audiosrv -Force

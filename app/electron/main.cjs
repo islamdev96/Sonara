@@ -1,7 +1,7 @@
 // main.cjs - Sonara (self-contained edition).
 //
 // Key change vs. the old build: there is NO dependency on Equalizer APO. The
-// boost/EQ/effects are done by our OWN engine (BoosterAPO.dll). This process
+// boost/EQ/effects are done by our OWN engine (SonaraAPO.dll). This process
 // only (1) makes sure the engine is installed/attached, and (2) publishes live
 // parameters to it through the shared params.bin bridge.
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, globalShortcut, dialog, shell } = require('electron');
@@ -18,8 +18,8 @@ const licensing = require('./licensing.cjs');
 const RES = process.resourcesPath || __dirname;
 const HOST_EXE = app.isPackaged ? path.join(RES, 'engine', 'SonaraHost.exe')
                                 : path.join(__dirname, '..', '..', 'build', 'Release', 'SonaraHost.exe');
-const ENGINE_DLL = app.isPackaged ? path.join(RES, 'engine', 'BoosterAPO.dll')
-                                  : path.join(__dirname, '..', '..', 'build', 'Release', 'BoosterAPO.dll');
+const ENGINE_DLL = app.isPackaged ? path.join(RES, 'engine', 'SonaraAPO.dll')
+                                  : path.join(__dirname, '..', '..', 'build', 'Release', 'SonaraAPO.dll');
 const INSTALL_PS1 = app.isPackaged ? path.join(RES, 'engine', 'install-engine.ps1')
                                    : path.join(__dirname, '..', '..', 'engine', 'scripts', 'install-engine.ps1');
 const UNINSTALL_PS1 = app.isPackaged ? path.join(RES, 'engine', 'uninstall-engine.ps1')
@@ -73,7 +73,7 @@ function stopHost() {
   } catch (e) {}
 
   // Restore the original audio device from Electron fallback!
-  const ORIG_DEV_FILE = path.join(process.env.ProgramData || 'C:\\ProgramData', 'WinAudioBoosterPro', 'origdev.txt');
+  const ORIG_DEV_FILE = path.join(process.env.ProgramData || 'C:\\ProgramData', 'Sonara', 'origdev.txt');
   if (fs.existsSync(ORIG_DEV_FILE)) {
     try {
       const origId = fs.readFileSync(ORIG_DEV_FILE, 'utf8').trim();

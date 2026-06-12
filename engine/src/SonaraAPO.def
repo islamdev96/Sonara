@@ -1,5 +1,5 @@
-; Export table for the self-contained Booster APO COM server.
-LIBRARY BoosterAPO
+; Export table for the self-contained Sonara APO COM server.
+LIBRARY SonaraAPO
 EXPORTS
     DllGetClassObject   PRIVATE
     DllCanUnloadNow     PRIVATE

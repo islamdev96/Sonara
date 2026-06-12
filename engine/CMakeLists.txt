@@ -40,23 +40,23 @@ if(WIN32 AND MSVC)
               "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64"
         PATH_SUFFIXES "um" "lib")
 
-    add_library(BoosterAPO SHARED
+    add_library(SonaraAPO SHARED
         src/dllmain.cpp
-        src/apo/BoosterAPO.cpp
+        src/apo/SonaraAPO.cpp
         src/apo/ClassFactory.cpp
-        src/BoosterAPO.def
+        src/SonaraAPO.def
     )
-    target_compile_definitions(BoosterAPO PRIVATE UNICODE _UNICODE NOMINMAX)
-    set_target_properties(BoosterAPO PROPERTIES
-        OUTPUT_NAME "BoosterAPO")
+    target_compile_definitions(SonaraAPO PRIVATE UNICODE _UNICODE NOMINMAX)
+    set_target_properties(SonaraAPO PROPERTIES
+        OUTPUT_NAME "SonaraAPO")
 
     if(WDK_APO_INCLUDE)
-        target_include_directories(BoosterAPO PRIVATE ${WDK_APO_INCLUDE})
+        target_include_directories(SonaraAPO PRIVATE ${WDK_APO_INCLUDE})
     else()
         message(WARNING "WDK audioenginebaseapo.h not found; install the WDK.")
     endif()
 
-    target_link_libraries(BoosterAPO PRIVATE
+    target_link_libraries(SonaraAPO PRIVATE
         ole32 oleaut32 uuid propsys avrt ksuser
         $<$<BOOL:${WDK_APO_LIB}>:${WDK_APO_LIB}>
         $<$<BOOL:${WDK_MEDIA_TYPE_LIB}>:${WDK_MEDIA_TYPE_LIB}>)

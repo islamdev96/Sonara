@@ -10,8 +10,8 @@ const os = require('os');
 const STATUS_MAGIC = 0x57414253; // 'WABS'
 const HEARTBEAT_TIMEOUT_MS = 3000; // engine considered dead after 3s of no heartbeat
 
-// %ProgramData%\WinAudioBoosterPro\status.bin
-const STATUS_DIR = path.join(process.env.ProgramData || path.join(os.homedir(), 'AppData', 'Local'), 'WinAudioBoosterPro');
+// %ProgramData%\Sonara\status.bin
+const STATUS_DIR = path.join(process.env.ProgramData || path.join(os.homedir(), 'AppData', 'Local'), 'Sonara');
 const STATUS_FILE = path.join(STATUS_DIR, 'status.bin');
 
 // Parse the StatusBlock struct from a Buffer.

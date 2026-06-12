@@ -24,7 +24,7 @@
     "files": ["dist/**/*", "electron/**/*"],
     "extraResources": [
       { "from": "../build/Release/SonaraHost.exe", "to": "engine/SonaraHost.exe" },
-      { "from": "../build/Release/BoosterAPO.dll", "to": "engine/BoosterAPO.dll" },
+      { "from": "../build/Release/SonaraAPO.dll", "to": "engine/SonaraAPO.dll" },
       { "from": "../engine/scripts/install-engine.ps1", "to": "engine/install-engine.ps1" },
       { "from": "../engine/scripts/uninstall-engine.ps1", "to": "engine/uninstall-engine.ps1" }
     ],

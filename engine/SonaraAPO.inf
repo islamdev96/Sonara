@@ -1,38 +1,38 @@
-; BoosterAPO.inf - optional driver-package installation of the WinAudio Booster
-; Pro engine. Lets the APO be installed/attached through a signed INF (required
+; SonaraAPO.inf - optional driver-package installation of the Sonara
+; engine. Lets the APO be installed/attached through a signed INF (required
 ; for distribution / WHQL). For dev installs, scripts/install-engine.ps1 is
 ; simpler. See BUILD.md for code-signing requirements.
-
+ 
 [Version]
 Signature   = "$WINDOWS NT$"
 Class       = MEDIA
 ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider    = %ProviderName%
-CatalogFile = BoosterAPO.cat
+CatalogFile = SonaraAPO.cat
 DriverVer   = 01/01/2026,1.0.0.0
 PnpLockdown = 1
-
+ 
 [SourceDisksNames]
 1 = %DiskName%
-
+ 
 [SourceDisksFiles]
-BoosterAPO.dll = 1
-
+SonaraAPO.dll = 1
+ 
 [DestinationDirs]
 DefaultDestDir = 11   ; System32
-
+ 
 [DefaultInstall.NTamd64]
-CopyFiles = Booster.CopyFiles
-
+CopyFiles = Sonara.CopyFiles
+ 
 [DefaultInstall.NTamd64.Services]
-
-[Booster.CopyFiles]
-BoosterAPO.dll
-
+ 
+[Sonara.CopyFiles]
+SonaraAPO.dll
+ 
 [DefaultInstall.NTamd64.CoInstallers]
-
+ 
 ; APO registration (mirrors DllRegisterServer for INF-based deployment).
 [Strings]
 ProviderName = "Sonara"
 DiskName     = "Sonara Engine Install Disk"
-CLSID_Booster = "{A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C}"
+CLSID_Sonara = "{A1B2C3D4-E5F6-47A8-9B0C-1D2E3F4A5B6C}"

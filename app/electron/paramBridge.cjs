@@ -1,5 +1,5 @@
 // paramBridge.cjs - Writes the binary Parameters struct that the self-contained
-// audio engine (BoosterAPO.dll) memory-maps. This is the bridge between the GUI
+// audio engine (SonaraAPO.dll) memory-maps. This is the bridge between the GUI
 // and our own engine - it replaces the old Equalizer APO config.txt approach.
 //
 // Layout MUST match src/dsp/Parameters.h (#pragma pack(4)).
@@ -12,8 +12,8 @@ const VERSION = 3;
 const NUM_EQ = 10;
 const kEqFrequencies = [31.5, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0];
 
-// %ProgramData%\WinAudioBoosterPro\params.bin
-const PARAMS_DIR = path.join(process.env.ProgramData || path.join(os.homedir(), 'AppData', 'Local'), 'WinAudioBoosterPro');
+// %ProgramData%\Sonara\params.bin
+const PARAMS_DIR = path.join(process.env.ProgramData || path.join(os.homedir(), 'AppData', 'Local'), 'Sonara');
 const PARAMS_FILE = path.join(PARAMS_DIR, 'params.bin');
 
 let seq = 0;
@@ -73,7 +73,7 @@ function serialize(p) {
 }
 
 // Publish parameters to the engine. Writes seq last to ensure the real-time
-// seqlock reader in BoosterAPO never reads a torn parameter state.
+// seqlock reader in SonaraAPO never reads a torn parameter state.
 function publish(p) {
   ensureDir();
   seq = (seq + 1) >>> 0;

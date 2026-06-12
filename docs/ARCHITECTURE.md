@@ -14,8 +14,8 @@ flowchart TD
         StatusBridge --> UI
     end
 
-    Params[("params.bin\n%ProgramData%\\WinAudioBoosterPro")]
-    Status[("status.bin\n%ProgramData%\\WinAudioBoosterPro")]
+    Params[("params.bin\n%ProgramData%\\Sonara")]
+    Status[("status.bin\n%ProgramData%\\Sonara")]
     Bridge -- "memory-mapped write" --> Params
     Status -- "file read" --> StatusBridge
 
@@ -66,20 +66,20 @@ In the user-mode VAD architecture, instead of injecting an APO DLL directly into
 | `src/apo/SharedParams.h` | Maps `params.bin` and reads parameters with a seqlock (RT-thread safe, pinned memory via `VirtualLock`, no page faults). |
 | `src/apo/SharedStatus.h` | Maps `status.bin` and writes heartbeat + audio levels with a seqlock (RT-thread safe, pinned memory). |
 | `src/apo/StatusBlock.h` | Defines the binary POD structure for the heartbeat/RMS status bridge. |
-| `src/apo/BoosterAPO.{h,cpp}` | (Legacy Reference) The system effect APO implementation, retained for reference or alternative setups. |
+| `src/apo/SonaraAPO.{h,cpp}` | (Legacy Reference) The system effect APO implementation, retained for reference or alternative setups. |
 
 ## 3. The parameter and status bridges (Bi-directional IPC)
 
 The UI never talks to the audio processing thread directly, ensuring a crash or hang in the UI cannot stall the physical audio stream. Communication is completely bi-directional via memory-mapped files:
 
 - **Parameter Bridge (UI → Host):**
-  - **File:** `C:\ProgramData\WinAudioBoosterPro\params.bin`
+  - **File:** `C:\ProgramData\Sonara\params.bin`
   - **Concurrency:** A sequence counter (seqlock) lets the reader detect torn writes and skip them. It uses `YieldProcessor()` rather than `Sleep(0)` in its retry spinloop to be completely real-time safe.
   - **Layout:** Magic `WABP`, version, sequence counter, enabled flag, preampDb, outputGainDb, the 10-band EQ gains, and the enhancer and limiter settings. Pinned via `VirtualLock` to avoid soft page faults on the RT audio thread.
   - **Path:** `app/electron/paramBridge.cjs` (writer) and `engine/src/apo/SharedParams.h` (reader, utilized by `SonaraHost.exe`).
 
 - **Status Bridge (Host → UI):**
-  - **File:** `C:\ProgramData\WinAudioBoosterPro\status.bin`
+  - **File:** `C:\ProgramData\Sonara\status.bin`
   - **Concurrency:** A seqlock-protected writer avoids torn writes. The host writes processing stats and heartbeat every ~100ms.
   - **Layout:** Magic `WABS`, sequence counter, heartbeat tick, RMS levels (L/R), Peak levels (L/R), sample rate, and channels. Pinned via `VirtualLock` to guarantee RT-thread safety.
   - **Path:** `engine/src/apo/SharedStatus.h` / `StatusBlock.h` (writer, utilized by `SonaraHost.exe`) and `app/electron/statusBridge.cjs` (reader). Used to verify the host is actually running and drive the live VU meter in the UI.

@@ -33,7 +33,7 @@ Expected: `ALL TESTS PASSED` (7/7).
 ```powershell
 cmake -S engine -B build -A x64
 cmake --build build --config Release
-# -> build/Release/BoosterAPO.dll
+# -> build/Release/SonaraAPO.dll
 ```
 
 If CMake warns that `audioenginebaseapo.h` was not found, install the WDK and
@@ -42,7 +42,7 @@ ensure `WDKContentRoot` is set in the environment.
 ### Code signing (required before install)
 
 ```powershell
-signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 build/Release/BoosterAPO.dll
+signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 build/Release/SonaraAPO.dll
 ```
 
 Windows `audiodg.exe` will silently refuse to load an unsigned APO.
@@ -56,7 +56,7 @@ npm run dist        # tsc + vite build, then electron-builder (NSIS)
 # -> app/release/Sonara Setup <version>.exe
 ```
 
-`electron-builder` bundles `build/Release/BoosterAPO.dll` and the PowerShell
+`electron-builder` bundles `build/Release/SonaraAPO.dll` and the PowerShell
 scripts (see `extraResources` in `app/package.json`) into the installer under
 `resources/engine/`.
 
@@ -75,7 +75,7 @@ and `engine/scripts/` folders.
 
 ```powershell
 # from an elevated shell
-engine\scripts\install-engine.ps1 -DllPath build\Release\BoosterAPO.dll
+engine\scripts\install-engine.ps1 -DllPath build\Release\SonaraAPO.dll
 engine\scripts\uninstall-engine.ps1
 ```
 

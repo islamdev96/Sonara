@@ -1,32 +1,32 @@
-// BoosterAPO.cpp - implementation of the System Effect APO. Hosts the portable
+// SonaraAPO.cpp - implementation of the System Effect APO. Hosts the portable
 // BoostEngine and pulls live parameters from shared memory. Real-time safe.
-#include "BoosterAPO.h"
+#include "SonaraAPO.h"
 #include <audiomediatype.h>
 #include <new>
 #include <cstring>
 #include <cmath>
-
+ 
 #include <mmdeviceapi.h>
 #include <functiondiscoverykeys_devpkey.h>
-
+ 
 extern LONG g_cDllRef;
 // Registration properties advertised to the audio engine.
 static const CRegAPOProperties<1> g_RegProps(
-    CLSID_BoosterAPO,
+    CLSID_SonaraAPO,
     L"Sonara Engine",
     L"Copyright (c) Sonara",
     1, 1,
     __uuidof(IAudioProcessingObject),
     APO_FLAG_DEFAULT
 );
-
+ 
 // Static helper to query default device friendly name.
 static void GetDefaultPlaybackDeviceName(char* outName, size_t maxLen) {
     outName[0] = '\0';
     IMMDeviceEnumerator* pEnumerator = nullptr;
     HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) return;
-
+ 
     IMMDevice* pDevice = nullptr;
     hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
     if (SUCCEEDED(hr)) {
@@ -47,22 +47,22 @@ static void GetDefaultPlaybackDeviceName(char* outName, size_t maxLen) {
     }
     pEnumerator->Release();
 }
-
-CBoosterAPO::CBoosterAPO() : CBaseAudioProcessingObject(g_RegProps) {
+ 
+CSonaraAPO::CSonaraAPO() : CBaseAudioProcessingObject(g_RegProps) {
     InterlockedIncrement(&g_cDllRef);
     // Open the shared parameter section. If it does not exist yet the engine
     // simply runs at unity until the UI publishes settings.
     m_params.open();
     m_status.open();
 }
-
-CBoosterAPO::~CBoosterAPO() {
+ 
+CSonaraAPO::~CSonaraAPO() {
     m_status.close();
     m_params.close();
     InterlockedDecrement(&g_cDllRef);
 }
-
-STDMETHODIMP CBoosterAPO::QueryInterface(REFIID riid, void** ppv) {
+ 
+STDMETHODIMP CSonaraAPO::QueryInterface(REFIID riid, void** ppv) {
     if (!ppv) return E_POINTER;
     if (riid == __uuidof(IUnknown)) {
         *ppv = static_cast<IAudioProcessingObject*>(this);
@@ -81,28 +81,28 @@ STDMETHODIMP CBoosterAPO::QueryInterface(REFIID riid, void** ppv) {
     AddRef();
     return S_OK;
 }
-
-STDMETHODIMP CBoosterAPO::GetRegistrationProperties(APO_REG_PROPERTIES** ppProps) {
+ 
+STDMETHODIMP CSonaraAPO::GetRegistrationProperties(APO_REG_PROPERTIES** ppProps) {
     if (!ppProps) return E_POINTER;
     *ppProps = (APO_REG_PROPERTIES*)CoTaskMemAlloc(sizeof(APO_REG_PROPERTIES));
     if (!*ppProps) return E_OUTOFMEMORY;
     **ppProps = g_RegProps;
     return S_OK;
 }
-
-STDMETHODIMP CBoosterAPO::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
+ 
+STDMETHODIMP CSonaraAPO::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
     UNREFERENCED_PARAMETER(cbDataSize);
     UNREFERENCED_PARAMETER(pbyData);
     return S_OK;
 }
-
-STDMETHODIMP CBoosterAPO::GetLatency(HNSTIME* pTime) {
+ 
+STDMETHODIMP CSonaraAPO::GetLatency(HNSTIME* pTime) {
     if (!pTime) return E_POINTER;
     *pTime = 0; // limiter lookahead is internal and fixed; report 0 added blocks
     return S_OK;
 }
-
-STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMediaType* pReq,
+ 
+STDMETHODIMP CSonaraAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMediaType* pReq,
                                                  IAudioMediaType** ppSup) {
     if (!pReq) return E_POINTER;
     
@@ -115,7 +115,7 @@ STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMe
         if (ppSup == nullptr) {
             return APOERR_FORMAT_NOT_SUPPORTED;
         }
-
+ 
         WAVEFORMATEXTENSIBLE wfx = {};
         wfx.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
         wfx.Format.nChannels = (WORD)fmt.dwSamplesPerFrame;
@@ -127,7 +127,7 @@ STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMe
         wfx.Samples.wValidBitsPerSample = 32;
         wfx.dwChannelMask = fmt.dwChannelMask;
         wfx.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-
+ 
         IAudioMediaType* pProposed = nullptr;
         hr = CreateAudioMediaType((WAVEFORMATEX*)&wfx, sizeof(WAVEFORMATEXTENSIBLE), &pProposed);
         if (SUCCEEDED(hr)) {
@@ -154,12 +154,12 @@ STDMETHODIMP CBoosterAPO::IsInputFormatSupported(IAudioMediaType* pOpp, IAudioMe
     }
     return S_OK;
 }
-
-STDMETHODIMP CBoosterAPO::LockForProcess(UINT32 cInput, APO_CONNECTION_DESCRIPTOR** ppInput,
+ 
+STDMETHODIMP CSonaraAPO::LockForProcess(UINT32 cInput, APO_CONNECTION_DESCRIPTOR** ppInput,
                                          UINT32 cOutput, APO_CONNECTION_DESCRIPTOR** ppOutput) {
     HRESULT hr = CBaseAudioProcessingObject::LockForProcess(cInput, ppInput, cOutput, ppOutput);
     if (FAILED(hr)) return hr;
-
+ 
     // Pull the negotiated format from the input connections.
     UNCOMPRESSEDAUDIOFORMAT fmt = {};
     if (cInput > 0 && ppInput && ppInput[0] && ppInput[0]->pFormat) {
@@ -167,7 +167,7 @@ STDMETHODIMP CBoosterAPO::LockForProcess(UINT32 cInput, APO_CONNECTION_DESCRIPTO
     }
     m_channels   = fmt.dwSamplesPerFrame ? fmt.dwSamplesPerFrame : 2;
     m_sampleRate = fmt.fFramesPerSecond ? fmt.fFramesPerSecond : 48000.0f;
-
+ 
     m_engine.prepare(m_sampleRate, (int)m_channels);
     m_params.open(); // Retry opening the file if it wasn't available at startup
     m_status.open(); // Also retry the status file
@@ -176,24 +176,24 @@ STDMETHODIMP CBoosterAPO::LockForProcess(UINT32 cInput, APO_CONNECTION_DESCRIPTO
     m_locked = true;
     return S_OK;
 }
-
-STDMETHODIMP CBoosterAPO::UnlockForProcess() {
+ 
+STDMETHODIMP CSonaraAPO::UnlockForProcess() {
     m_locked = false;
     return CBaseAudioProcessingObject::UnlockForProcess();
 }
-
+ 
 // ---- The real-time DSP callback. NO blocking, NO allocation here. ----
-STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPERTY** ppInput,
+STDMETHODIMP_(void) CSonaraAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPERTY** ppInput,
                                             UINT32 cOutput, APO_CONNECTION_PROPERTY** ppOutput) {
     if (cInput == 0 || cOutput == 0) return;
     APO_CONNECTION_PROPERTY* in = ppInput[0];
     APO_CONNECTION_PROPERTY* out = ppOutput[0];
     if (!in || !out) return;
-
+ 
     const UINT32 frames = in->u32ValidFrameCount;
     float* pIn  = reinterpret_cast<float*>(in->pBuffer);
     float* pOut = reinterpret_cast<float*>(out->pBuffer);
-
+ 
     switch (in->u32BufferFlags) {
     case BUFFER_INVALID:
         out->u32ValidFrameCount = 0; break;
@@ -213,7 +213,7 @@ STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPER
         }
         if (pIn != pOut) std::memcpy(pOut, pIn, sizeof(float) * frames * m_channels);
         m_engine.process(pOut, (int)frames);
-
+ 
         // Accumulate RMS/peak for the status writer.
         {
             float sumL = 0.0f, sumR = 0.0f, pkL = 0.0f, pkR = 0.0f;
@@ -237,12 +237,12 @@ STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPER
             if (pkL > m_peakL) m_peakL = pkL;
             if (pkR > m_peakR) m_peakR = pkR;
         }
-
+ 
         // Write status (heartbeat + levels + active device + raw samples) every 5 callbacks (~50 ms).
         if (++m_statusCounter >= 5) {
             const float rmsL = std::sqrt(m_rmsAccL / m_statusCounter);
             const float rmsR = std::sqrt(m_rmsAccR / m_statusCounter);
-
+ 
             // Extract latest 256 contiguous processed samples
             float rawSamples[256] = {0};
             int copyCount = std::min(256, (int)frames);
@@ -257,10 +257,10 @@ STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPER
                     }
                 }
             }
-
+ 
             char activeDevice[128] = {0};
             GetDefaultPlaybackDeviceName(activeDevice, sizeof(activeDevice));
-
+ 
             m_status.write(rmsL, rmsR, m_peakL, m_peakR,
                            static_cast<uint32_t>(m_sampleRate), m_channels,
                            activeDevice, rawSamples);
@@ -268,18 +268,18 @@ STDMETHODIMP_(void) CBoosterAPO::APOProcess(UINT32 cInput, APO_CONNECTION_PROPER
             m_peakL = m_peakR = 0.0f;
             m_statusCounter = 0;
         }
-
+ 
         out->u32ValidFrameCount = frames;
         out->u32BufferFlags = in->u32BufferFlags;
         break;
     }
 }
-
-STDMETHODIMP CBoosterAPO::GetEffectsList(LPGUID* ppEffectsIds, UINT* pcEffects, HANDLE) {
+ 
+STDMETHODIMP CSonaraAPO::GetEffectsList(LPGUID* ppEffectsIds, UINT* pcEffects, HANDLE) {
     if (!ppEffectsIds || !pcEffects) return E_POINTER;
     *ppEffectsIds = (LPGUID)CoTaskMemAlloc(sizeof(GUID));
     if (!*ppEffectsIds) return E_OUTOFMEMORY;
-    **ppEffectsIds = CLSID_BoosterAPO;
+    **ppEffectsIds = CLSID_SonaraAPO;
     *pcEffects = 1;
     return S_OK;
 }

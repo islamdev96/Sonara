@@ -6,7 +6,7 @@
 #include <unknwn.h>
 #include <strsafe.h>
 #include <olectl.h>
-#include "apo/BoosterAPO.h"
+#include "apo/SonaraAPO.h"
 #include "apo/ClassFactory.h"
 
 LONG g_cDllRef = 0;
@@ -23,8 +23,8 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID) {
 extern "C" HRESULT STDAPICALLTYPE DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
-    if (rclsid != CLSID_BoosterAPO) return CLASS_E_CLASSNOTAVAILABLE;
-    CBoosterClassFactory* cf = new (std::nothrow) CBoosterClassFactory();
+    if (rclsid != CLSID_SonaraAPO) return CLASS_E_CLASSNOTAVAILABLE;
+    CSonaraClassFactory* cf = new (std::nothrow) CSonaraClassFactory();
     if (!cf) return E_OUTOFMEMORY;
     const HRESULT hr = cf->QueryInterface(riid, ppv);
     cf->Release();

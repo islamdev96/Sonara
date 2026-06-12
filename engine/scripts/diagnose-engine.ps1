@@ -1,7 +1,7 @@
 # diagnose-engine.ps1 — Sonara: prove whether the APO is actually loaded & processing
 $ErrorActionPreference = 'SilentlyContinue'
 
-$LogFile = "c:\Users\Islam Glab\Desktop\New folder\Sonara\WinAudioBoosterPro\diagnose_result.txt"
+$LogFile = Join-Path $PSScriptRoot "..\diagnose_result.txt"
 Start-Transcript -Path $LogFile -Force
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -11,8 +11,8 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 $Clsid   = '{538B6BB6-27D6-4D50-A09D-6E1883A66888}'
 $PkeySfx = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5'
 $PkeyMfx = '{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6'
-$Dll     = Join-Path $env:WINDIR 'System32\BoosterAPO.dll'
-$DataDir = Join-Path $env:ProgramData 'WinAudioBoosterPro'
+$Dll     = Join-Path $env:WINDIR 'System32\SonaraAPO.dll'
+$DataDir = Join-Path $env:ProgramData 'Sonara'
 
 function Pass($t){ Write-Host "[PASS] $t" -ForegroundColor Green }
 function Fail($t){ Write-Host "[FAIL] $t" -ForegroundColor Red }
@@ -73,9 +73,9 @@ Get-ChildItem $base | ForEach-Object {
 
 # 5) DEFINITIVE #1 — is the DLL inside audiodg.exe?
 Write-Host "`n-- audiodg.exe module check --"
-$tl = tasklist /m BoosterAPO.dll 2>$null | Out-String
-if ($tl -match 'audiodg') { Pass "BoosterAPO.dll IS loaded in audiodg.exe." }
-else { Fail "BoosterAPO.dll NOT found in audiodg.exe (note: audiodg is protected, may be a false negative -> rely on heartbeat below)." }
+$tl = tasklist /m SonaraAPO.dll 2>$null | Out-String
+if ($tl -match 'audiodg') { Pass "SonaraAPO.dll IS loaded in audiodg.exe." }
+else { Fail "SonaraAPO.dll NOT found in audiodg.exe (note: audiodg is protected, may be a false negative -> rely on heartbeat below)." }
 
 # 6) DEFINITIVE #2 (ground truth) — status.bin heartbeat while audio plays
 Write-Host "`n-- status.bin heartbeat (only updates if APO code runs inside audiodg) --"

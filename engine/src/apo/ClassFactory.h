@@ -1,9 +1,9 @@
-// ClassFactory.h - minimal IClassFactory that creates CBoosterAPO instances.
+// ClassFactory.h - minimal IClassFactory that creates CSonaraAPO instances.
 #pragma once
 #include <windows.h>
 #include <unknwn.h>
 
-class CBoosterClassFactory : public IClassFactory {
+class CSonaraClassFactory : public IClassFactory {
 public:
     STDMETHOD(QueryInterface)(REFIID riid, void** ppv) override;
     STDMETHOD_(ULONG, AddRef)() override { return InterlockedIncrement(&m_cRef); }

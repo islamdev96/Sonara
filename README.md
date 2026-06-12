@@ -1,7 +1,5 @@
 # Sonara
 
-*(سونارا) — commercial brand. Internal engine artifacts keep the `BoosterAPO` name (DLL, registry, `%ProgramData%\WinAudioBoosterPro`).*
-
 **A self-contained Windows volume booster & audio enhancer.** Sonara ships its own
 system-wide audio engine (an Audio Processing Object, APO) and a polished desktop
 app — with **no dependency on Equalizer APO or any other third-party software**.
@@ -29,10 +27,10 @@ sonara/
 │  │  ├─ dsp/         Portable, OS-independent DSP core (header-only)
 │  │  ├─ apo/         Windows APO/COM shell that hosts the DSP core
 │  │  ├─ dllmain.cpp  COM entry points + self-registration
-│  │  └─ BoosterAPO.def
+│  │  └─ SonaraAPO.def
 │  ├─ scripts/        PowerShell install/uninstall (register + attach engine)
 │  ├─ test/           Portable DSP unit tests (run on any OS)
-│  ├─ BoosterAPO.inf  Driver/APO information file
+│  ├─ SonaraAPO.inf   Driver/APO information file
 │  └─ CMakeLists.txt  Builds the engine DLL (Win+WDK) and the portable tests
 ├─ app/               Electron + React desktop app
 │  ├─ electron/       Main process: param bridge, licensing, engine install

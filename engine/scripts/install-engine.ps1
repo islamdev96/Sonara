@@ -2,18 +2,18 @@
 <#
 .SYNOPSIS
   Installs and registers the Sonara self-contained audio engine
-  (BoosterAPO.dll) and attaches it to the chosen render endpoint's effect chain.
+  (SonaraAPO.dll) and attaches it to the chosen render endpoint's effect chain.
   NO third-party software (no Equalizer APO) is required.
 
 .DESCRIPTION
-  1. Copies the signed BoosterAPO.dll into System32.
+  1. Copies the signed SonaraAPO.dll into System32.
   2. Registers the COM server + APO (regsvr32).
   3. Writes the APO CLSID into the selected endpoint's FxProperties so Windows
      loads our effect into the audio graph for that device.
   4. Restarts the Windows Audio service so the change takes effect (no reboot).
 #>
 param(
-  [string]$DllPath = "$PSScriptRoot\BoosterAPO.dll",
+  [string]$DllPath = "$PSScriptRoot\SonaraAPO.dll",
   [string]$DeviceId = ""   # empty = default render device
 )
 
@@ -70,10 +70,10 @@ function Set-MultiStringProperty {
 
 Write-Host '== Sonara :: engine install ==' -ForegroundColor Cyan
 
-if (!(Test-Path $DllPath)) { throw "BoosterAPO.dll not found at $DllPath" }
+if (!(Test-Path $DllPath)) { throw "SonaraAPO.dll not found at $DllPath" }
 
 # 1) Copy DLL to System32 (audiodg.exe loads APOs from a protected location).
-$dest = Join-Path $env:WINDIR 'System32\BoosterAPO.dll'
+$dest = Join-Path $env:WINDIR 'System32\SonaraAPO.dll'
 Copy-Item -Path $DllPath -Destination $dest -Force
 Write-Host "Copied engine to $dest"
 

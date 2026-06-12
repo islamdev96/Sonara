@@ -5,7 +5,7 @@
 !macro customInstall
   DetailPrint "Installing Sonara audio engine..."
   ; Run the engine installer (elevated; perMachine install already elevated).
-  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\engine\install-engine.ps1" -DllPath "$INSTDIR\resources\engine\BoosterAPO.dll"'
+  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\engine\install-engine.ps1" -DllPath "$INSTDIR\resources\engine\SonaraAPO.dll"'
   Pop $0
   DetailPrint "Engine install exit code: $0"
 !macroend

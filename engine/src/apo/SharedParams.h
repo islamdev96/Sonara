@@ -77,7 +77,7 @@ public:
         if (FAILED(SHGetFolderPathW(nullptr, CSIDL_COMMON_APPDATA, nullptr, 0, base)))
             return false;
         wchar_t dir[MAX_PATH];
-        StringCchPrintfW(dir, MAX_PATH, L"%s\\WinAudioBoosterPro", base);
+        StringCchPrintfW(dir, MAX_PATH, L"%s\\Sonara", base);
         CreateDirectoryW(dir, nullptr);
         return SUCCEEDED(StringCchPrintfW(out, cch, L"%s\\params.bin", dir));
     }
